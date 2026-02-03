@@ -26,7 +26,7 @@ class InterviewModel(BaseModel):
     interviewer_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
 
     candidate: Mapped["CandidateModel"] = relationship(back_populates="interviews")
-    interviewer: Mapped["UserModel"] = relationship(back_populates="conducted_interviews")
+    interviewer: Mapped["UserModel"] = relationship()
 
 
 CandidateModel.interviews = relationship("InterviewModel", back_populates="candidate")

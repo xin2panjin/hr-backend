@@ -45,6 +45,6 @@ class PositionModel(BaseModel):
     department_id: Mapped[str] = mapped_column(ForeignKey("departments.id"))
     creator_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
 
-    department: Mapped["DepartmentModel"] = relationship(back_populates="positions", lazy="joined")
-    creator: Mapped["UserModel"] = relationship(back_populates="created_positions", lazy="joined")
+    department: Mapped["DepartmentModel"] = relationship(lazy="joined")
+    creator: Mapped["UserModel"] = relationship(lazy="joined")
     candidates: Mapped[List["CandidateModel"]] = relationship(back_populates="position")

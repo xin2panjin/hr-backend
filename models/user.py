@@ -35,7 +35,7 @@ class UserModel(BaseModel):
     realname: Mapped[str] = mapped_column(String(50), nullable=False)
     avatar: Mapped[Optional[str]] = mapped_column(String(255))
     department_id: Mapped[Optional[str]] = mapped_column(ForeignKey("departments.id"))
-    status: Mapped[UserStatus] = mapped_column(SEnum(UserStatus), default=True)
+    status: Mapped[UserStatus] = mapped_column(SEnum(UserStatus), default=UserStatus.ACTIVE)
     is_hr: Mapped[bool] = mapped_column(Boolean, default=False)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
 
