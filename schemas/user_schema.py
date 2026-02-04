@@ -38,3 +38,10 @@ class UserLoginRespSchema(BaseModel):
 class UserInviteSchema(BaseModel):
     email: EmailStr = Field(..., description="邮箱")
     department_id: str = Field(..., description="部门ID")
+
+class UserRegisterSchema(BaseModel):
+    email: EmailStr = Field(..., description="邮箱")
+    invite_code: str = Field(..., min_length=6, max_length=6, description="邀请码")
+    username: str = Field(..., description="用户名")
+    realname: str = Field(..., description="真实姓名")
+    password: str = Field(..., min_length=6, max_length=20, description="密码")
