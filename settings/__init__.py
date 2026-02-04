@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
 
     # 邀请码过期时间
-    INVITE_CODE_EXPIRE = 60*60*24*2
+    INVITE_CODE_EXPIRE: int = 60*60*24*2
 
     # 邮箱相关的配置
     MAIL_USERNAME: str = Field(..., validation_alias="MAIL_USERNAME")
@@ -45,3 +45,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# print(f"settings.password: {settings.MAIL_PASSWORD1}")
