@@ -80,12 +80,6 @@ class DingdingUserModel(BaseModel):
     union_id: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     open_id: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     mobile: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
-    # access_token默认过期时间是2小时
-    access_token: Mapped[str] = mapped_column(String(255), nullable=False)
-    # refresh_token默认过期时间是30天
-    refresh_token: Mapped[str] = mapped_column(String(255), nullable=False)
-    # refresh_token的过期时间，保存的是时间戳
-    refresh_token_expire_at: Mapped[int] = mapped_column(Integer, nullable=False)
 
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     user: Mapped["UserModel"] = relationship(back_populates="dingding_user")

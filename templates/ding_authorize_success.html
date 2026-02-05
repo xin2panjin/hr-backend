@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>钉钉登录成功</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        .success-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 15px 50px rgba(47, 84, 150, 0.25);
+            padding: 50px 60px;
+            width: 100%;
+            max-width: 600px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .success-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 60px rgba(47, 84, 150, 0.35);
+        }
+
+        .success-icon {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, #5cb860, #4cae4c);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 30px;
+            position: relative;
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        .success-icon i {
+            font-size: 48px;
+            color: white;
+            position: relative;
+            z-index: 2;
+        }
+
+        .success-icon::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #5cb860, #4cae4c);
+            opacity: 0.8;
+            z-index: 1;
+            animation: ripple 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(76, 175, 80, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+        }
+
+        @keyframes ripple {
+            0% { transform: scale(1); opacity: 0.8; }
+            100% { transform: scale(2.5); opacity: 0; }
+        }
+
+        .dingtalk-logo {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .dingtalk-logo img {
+            height: 60px;
+            margin-right: 15px;
+        }
+
+        .dingtalk-logo span {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1768e5;
+            letter-spacing: -0.5px;
+        }
+
+        .welcome-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            background: linear-gradient(to right, #1768e5, #0e88eb);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .welcome-subtitle {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 35px;
+            line-height: 1.5;
+        }
+
+        .user-info {
+            background: #f8fbff;
+            border-radius: 16px;
+            padding: 25px;
+            margin: 30px 0;
+            border: 1px solid #e9f1ff;
+            box-shadow: inset 0 0 10px rgba(23, 104, 229, 0.08);
+        }
+
+        .user-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4a90e2, #1768e5);
+            margin: 0 auto 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(23, 104, 229, 0.25);
+        }
+
+        .user-name {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #1a365d;
+        }
+
+        .user-department {
+            color: #5a718e;
+            font-size: 16px;
+        }
+
+        .success-message {
+            background: linear-gradient(135deg, #e6f7ee, #d4f0e3);
+            border-left: 4px solid #52c41a;
+            padding: 15px 25px;
+            border-radius: 0 8px 8px 0;
+            margin: 25px 0;
+            text-align: left;
+            box-shadow: 0 2px 8px rgba(82, 196, 26, 0.15);
+        }
+
+        .success-message p {
+            margin: 5px 0;
+            color: #386641;
+            font-size: 16px;
+        }
+
+        .action-button {
+            background: linear-gradient(135deg, #1768e5, #0e88eb);
+            color: white;
+            border: none;
+            padding: 16px 45px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(23, 104, 229, 0.35);
+            margin-top: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(23, 104, 229, 0.45);
+            background: linear-gradient(135deg, #155fc9, #0d7ad4);
+        }
+
+        .action-button:active {
+            transform: translateY(0);
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: #5a718e;
+            text-decoration: none;
+            font-size: 15px;
+            transition: color 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .footer-links a:hover {
+            color: #1768e5;
+        }
+
+        .decoration {
+            position: absolute;
+            opacity: 0.07;
+            z-index: 0;
+        }
+
+        .decoration-1 {
+            top: -50px;
+            left: -50px;
+            font-size: 120px;
+            transform: rotate(-30deg);
+            color: #1768e5;
+        }
+
+        .decoration-2 {
+            bottom: -80px;
+            right: -30px;
+            font-size: 150px;
+            transform: rotate(15deg);
+            color: #52c41a;
+        }
+
+        .timestamp {
+            margin-top: 25px;
+            color: #888;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .success-card {
+                padding: 40px 30px;
+                margin: 15px;
+            }
+
+            .welcome-title {
+                font-size: 28px;
+            }
+
+            .welcome-subtitle {
+                font-size: 16px;
+            }
+
+            .user-name {
+                font-size: 22px;
+            }
+
+            .action-button {
+                padding: 14px 35px;
+                font-size: 17px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .success-card {
+                padding: 30px 25px;
+            }
+
+            .dingtalk-logo span {
+                font-size: 24px;
+            }
+
+            .welcome-title {
+                font-size: 26px;
+            }
+
+            .success-icon {
+                width: 85px;
+                height: 85px;
+            }
+
+            .success-icon i {
+                font-size: 40px;
+            }
+
+            .action-button {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="decoration decoration-1">
+            <i class="fas fa-certificate"></i>
+        </div>
+        <div class="decoration decoration-2">
+            <i class="fas fa-shield-check"></i>
+        </div>
+
+        <div class="success-card">
+            <div class="dingtalk-logo">
+                <i class="fab fa-dingtalk" style="font-size: 50px; color: #1768e5;"></i>
+                <span>钉钉</span>
+            </div>
+
+            <div class="success-icon">
+                <i class="fas fa-check"></i>
+            </div>
+
+            <h1 class="welcome-title">登录成功</h1>
+            <p class="welcome-subtitle">您已成功通过钉钉账号验证，欢迎回到工作平台</p>
+
+            <div class="user-info">
+                <div class="user-name">{{ username }}</div>
+            </div>
+
+            <div class="success-message">
+                <p><i class="fas fa-lock"></i> 您的账号已通过钉钉安全认证</p>
+                <p><i class="fas fa-shield-alt"></i> 企业级数据加密保护已启用</p>
+                <p><i class="fas fa-history"></i> 本次登录时间: <span id="login-time"></span></p>
+            </div>
+
+            <button class="action-button" onclick="goToDashboard()">
+                <i class="fas fa-tachometer-alt"></i> 进入工作台
+            </button>
+
+            <div class="timestamp">
+                登录完成时间: <span id="current-time"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 设置当前时间
+        function formatDateTime(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        }
+
+        // 设置登录时间和当前时间
+        const now = new Date();
+        document.getElementById('login-time').textContent = formatDateTime(now);
+        document.getElementById('current-time').textContent = formatDateTime(now);
+
+        // 模拟进入工作台
+        function goToDashboard() {
+            // 显示加载效果
+            const button = document.querySelector('.action-button');
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在跳转...';
+            button.disabled = true;
+
+            // 模拟跳转延迟
+            setTimeout(() => {
+                alert('正在跳转到工作台...\n（在实际应用中，这里会重定向到您的主应用页面）');
+                // 实际应用中使用: window.location.href = '/dashboard';
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }, 1500);
+        }
+
+        // 添加键盘支持
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                goToDashboard();
+            }
+        });
+    </script>
+</body>
+</html>
