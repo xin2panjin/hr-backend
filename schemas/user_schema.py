@@ -52,3 +52,6 @@ class UserListRespSchema(BaseModel):
 class UserStatusUpdateSchema(BaseModel):
     user_id: str = Field(..., description="员工的ID")
     status: UserStatus = Field(..., description="员工的新状态！")
+
+class DepartmentListRespSchema(BaseModel):
+    departments: List[DepartmentSchema]
