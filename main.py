@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from routers.user_router import router as user_router
+from routers.position_router import router as position_router
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from redis import asyncio as aioredis
@@ -34,6 +35,7 @@ app.add_middleware(
 )
 
 app.include_router(user_router)
+app.include_router(position_router)
 
 
 @app.get("/")
