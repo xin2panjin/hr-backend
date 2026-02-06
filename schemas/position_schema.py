@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from models.positions import EducationEnum
 from schemas.user_schema import UserSchema, DepartmentSchema
 
@@ -30,3 +30,6 @@ class PositionSchema(PositionBaseSchema):
 
 class PositionRespSchema(BaseModel):
     position: PositionSchema | None
+
+class PositionListRespSchema(BaseModel):
+    positions: List[PositionSchema]
