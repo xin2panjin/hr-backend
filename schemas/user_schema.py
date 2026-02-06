@@ -55,3 +55,16 @@ class UserStatusUpdateSchema(BaseModel):
 
 class DepartmentListRespSchema(BaseModel):
     departments: List[DepartmentSchema]
+
+class DingdingUserSchema(BaseModel):
+    id: str = Field(..., description="钉钉账号在自己服务器上的id")
+    nick: str = Field(..., description="在钉钉上的nickname")
+    union_id: str = Field(..., description="在钉钉上的union_id")
+    open_id: str = Field(..., description="在钉钉上的open_id")
+    mobile: str = Field(..., description="在钉钉上的手机号")
+    user_id: str = Field(..., description="在钉钉上的用户表的外键")
+
+    model_config = ConfigDict(from_attributes=True)
+
+class DingdingUserRespSchema(BaseModel):
+    dingding_user: DingdingUserSchema | None
