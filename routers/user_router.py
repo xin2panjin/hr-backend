@@ -9,7 +9,8 @@ from schemas.user_schema import (
     UserListRespSchema,
     UserStatusUpdateSchema,
     DepartmentListRespSchema,
-    DingdingUserRespSchema
+    DingdingUserRespSchema,
+    AssignDepartmentSchema
 )
 from dependencies import (
     get_session_instance,
@@ -270,3 +271,17 @@ async def dingtalk_account(
         user_repo = UserRepo(session)
         dingding_user = await user_repo.get_dingding_user(current_user.id)
     return {"dingding_user": dingding_user}
+
+@router.post("/assign/department", summary="分配部门给指定的HR", response_model=ResponseSchema)
+async def assign_department(
+    assign_data: AssignDepartmentSchema,
+    session: AsyncSession = Depends(get_session_instance),
+    _: UserModel = Depends(get_super_user),
+):
+    async with session.begin():
+        user_repo = UserRepo(session)
+        try:
+            await user_repo.assign_department(hr_id=assign_data.hr_id, department_ids=assign_data.department_ids)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        return ResponseSchema()
