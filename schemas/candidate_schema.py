@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from schemas.user_schema import UserSchema
+from core.cache import TaskInfoSchema
 
 
 class ResumeSchema(BaseModel):
@@ -9,3 +10,12 @@ class ResumeSchema(BaseModel):
 
 class ResumeUploadRespSchema(BaseModel):
     resume: ResumeSchema | None = Field(..., description="简历信息")
+
+class ResumePaseSchema(BaseModel):
+    resume_id: str = Field(..., description="简历ID")
+
+class ResumeParseTaskRespSchema(BaseModel):
+    task_id: str = Field(..., description="任务ID")
+
+class ResumeParseTaskInfoRespSchema(TaskInfoSchema):
+    pass

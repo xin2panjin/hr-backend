@@ -3,6 +3,7 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from pydantic import BaseModel, EmailStr
 from settings import settings
+from typing import Literal, Any
 
 
 class InviteInfoSchema(BaseModel):
@@ -15,10 +16,17 @@ class DingTalkTokenInfoSchema(BaseModel):
     refresh_token: str
     user_id: str
 
+class TaskInfoSchema(BaseModel):
+    task_id: str
+    status: Literal['pending', 'done', 'failed']
+    result: dict[str, Any] | None = None
+    error: str | None = None
+
 
 class HRCache(metaclass=SingletonMeta):
     invite_prefix = "invite:"
     dingtalk_prefix = "dingtalk:"
+    task_prefix = "task:"
 
     def __init__(self):
         self.cache_backend: RedisBackend = FastAPICache.get_backend()
@@ -52,3 +60,15 @@ class HRCache(metaclass=SingletonMeta):
     async def get_dingtalk_info(self, user_id: str):
         key = f"{self.dingtalk_prefix}{user_id}"
         return await self.get(key)
+
+    async def set_task_info(self, task_info: TaskInfoSchema):
+        key = f"{self.task_prefix}{task_info.task_id}"
+        await self.set(key, task_info.model_dump_json(), ex=60*60)
+
+    async def get_task_info(self, task_id: str) -> TaskInfoSchema | None:
+        key = f"{self.task_prefix}{task_id}"
+        task_json = await self.get(key)
+        if task_json is not None:
+            task_info = TaskInfoSchema.model_validate_json(task_json)
+            return task_info
+        return None
