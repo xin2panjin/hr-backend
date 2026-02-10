@@ -1,5 +1,5 @@
 from . import BaseRepo
-from models.candidate import ResumeModel
+from models.candidate import ResumeModel, CandidateModel
 from sqlalchemy import select
 
 
@@ -11,3 +11,10 @@ class ResumeRepo(BaseRepo):
 
     async def get_by_id(self, resume_id: str) -> ResumeModel:
         return await self.session.scalar(select(ResumeModel).where(ResumeModel.id == resume_id))
+
+
+class CandidateRepo(BaseRepo):
+    async def create_candidate(self, candidate_info: dict) -> CandidateModel:
+        candidate = CandidateModel(**candidate_info)
+        self.session.add(candidate)
+        return candidate

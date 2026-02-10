@@ -11,10 +11,11 @@ from uuid import uuid4
 import aiofiles
 from core.pdf import WordToPdfConverter
 from loguru import logger
-from repository.candidate_repo import ResumeRepo
-from schemas.candidate_schema import ResumeUploadRespSchema, ResumePaseSchema, ResumeParseTaskRespSchema, ResumeParseTaskInfoRespSchema
+from repository.candidate_repo import ResumeRepo, CandidateRepo
+from schemas.candidate_schema import ResumeUploadRespSchema, ResumePaseSchema, ResumeParseTaskRespSchema, ResumeParseTaskInfoRespSchema, CandidateCreateSchema
 from core.ocr import PaddleOcr
 from tasks import ocr_parse_resume_task
+from schemas import ResponseSchema
 
 # uv add aiofiles
 
@@ -101,6 +102,19 @@ async def get_task_status(
 ):
     task_info = await cache.get_task_info(task_id)
     return task_info.model_dump()
+
+@router.post("/create", summary="创建候选人", response_model=ResponseSchema)
+async def create_candidate(
+    candidate_data: CandidateCreateSchema,
+    session: AsyncSession = Depends(get_session_instance),
+    current_user: UserModel = Depends(get_current_user),
+):
+    async with session.begin():
+        candidate_dict = candidate_data.model_dump()
+        candidate_dict['creator_id'] = current_user.id
+        candidate_repo = CandidateRepo(session=session)
+        await candidate_repo.create_candidate(candidate_dict)
+    return ResponseSchema()
 
 
 @router.get("/resume/ocr/test")
