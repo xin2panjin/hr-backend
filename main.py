@@ -8,6 +8,7 @@ from settings import settings
 from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache import FastAPICache
 from routers.candidate_router import router as candidate_router
+from scheduler import start_email_polling
 
 
 @asynccontextmanager
@@ -20,9 +21,16 @@ async def lifespan(_: FastAPI):
     )
     cache_backend = RedisBackend(redis_client)
     FastAPICache.init(cache_backend, prefix="fastapi-cache")
+
+    bot, scheduler = await start_email_polling()
+
     yield
     # 2. yield之后的代码，是程序即将退出之前执行的
     await redis_client.close()
+    if bot.is_connected():
+        await bot.close()
+    if scheduler.running:
+        await scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
 
