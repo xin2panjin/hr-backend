@@ -102,10 +102,10 @@ async def score_for_candidate(
         "candidate": candidate.model_dump_json(),
         "position": position.model_dump_json()
     })
-    response = score_agent.ainvoke({
+    response = await score_agent.ainvoke({
         "messages": [{
             "role": "user",
-            "content": user_prompt
+            "content": user_prompt.text
         }]
     })
     candiate_score: AgentCandidateScoreSchema = response['structured_response']
@@ -127,6 +127,8 @@ async def score_for_candidate(
 
                 await candidate_repo.update_candidate_status(candidate_id=candidate.id, status=status)
             except Exception as e:
+                logger.error(e)
+                raise ValueError(e)
                 return f"得分工具执行失败，错误信息为：{e}"
     return f"得分工具执行成功！该候选人得分为：{candiate_score.model_dump_json()}"
 
@@ -395,7 +397,7 @@ class CandidateProcessAgent:
     async def ainvoke(self, messages: list[BaseMessage], thread_id: str):
         assert self._checkpointer is not None
         agent = create_agent(
-            model=qwen_llm,
+            model=deepseek_llm,
             system_prompt=CANDIDATE_PROCESS_SYSTEM_PROMPT,
             state_schema=CandidateAgentState,
             middleware=[
@@ -416,7 +418,7 @@ class CandidateProcessAgent:
             ],
             checkpointer=self._checkpointer
         )
-        response = await agent.invoke({
+        response = await agent.ainvoke({
             "messages": messages,
             "candidate": self.candidate,
             "position": self.position,
@@ -425,6 +427,7 @@ class CandidateProcessAgent:
         return response
 
     async def __aenter__(self):
+        # langchain如果大模型选择了一个工具，那么这个工具消息后的消息必须是工具调用后的结果，否则会报错
         self._checkpointer_conn = AsyncPostgresSaver.from_conn_string(settings.DATABASE_AGENT_URL)
         self._checkpointer = await self._checkpointer_conn.__aenter__()
         await self._checkpointer.setup()

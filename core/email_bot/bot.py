@@ -4,9 +4,9 @@ from email.message import EmailMessage
 from email.utils import make_msgid
 import smtplib
 
-from imap_client import ImapClient
-from smtp_client import SmtpClient
-from parser import parse_email
+from .imap_client import ImapClient
+from .smtp_client import SmtpClient
+from .parser import parse_email
 from .models import ParsedEmail
 from .settings import EmailBotSettings
 from loguru import logger
@@ -57,13 +57,19 @@ class EmailBot:
         await self._smtp.quit()
         self.is_connected = False
 
+    async def _ensure_connected(self) -> None:
+        if not self.is_connected:
+            await self.connect()
+
     async def fetch_latest(self, *, limit: int | None = None, criteria: str = "ALL") -> list[ParsedEmail]:
+        await self._ensure_connected()
         limit = limit or self.settings.default_fetch_limit
         uids = await self._imap.get_latest_uids(limit=limit, criteria=criteria)
         pairs = await self._imap.fetch_many_rfc822(uids)
         return [parse_email(uid, msg) for uid, msg in pairs]
 
     async def fetch_since_uid(self, last_uid: int, *, criteria: str = "ALL") -> list[ParsedEmail]:
+        await self._ensure_connected()
         # Using UID SEARCH with a range.
         # Example: UID 123:*  (inclusive)
         uids = await self._imap.search_uids(f"UID {last_uid + 1}:*")
@@ -75,6 +81,7 @@ class EmailBot:
         return [parse_email(uid, msg) for uid, msg in pairs]
 
     async def get_max_uid(self) -> int | None:
+        await self._ensure_connected()
         return await self._imap.get_max_uid()
 
     async def send_email(
@@ -86,6 +93,7 @@ class EmailBot:
         html: str | None = None,
         cc: str | list[str] | None = None,
     ) -> None:
+        await self._ensure_connected()
         msg = EmailMessage()
         msg["From"] = self.settings.email
         msg["To"] = ", ".join(to) if isinstance(to, list) else to

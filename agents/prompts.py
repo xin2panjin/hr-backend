@@ -75,7 +75,7 @@ CANDIDATE_PROCESS_SYSTEM_PROMPT = """
 
 工具描述：
 - get_current_time：如果涉及到相对时间时，比如昨天、明天、后天、下周三等，那么要先调用这个工具获取当前时间，再推测目标时间。
-- score_for_candidate：给候选人进行AI评分。
+- score_for_candidate：给候选人进行评分。
 - get_interviewer_available_slot：获取面试官的空闲时间。
 - send_interview_email：给候选人发送邮件，邀请候选人面试。
 - confirm_interview_time：如果候选人同意了面试时间，那么调用该工具来确定面试时间。

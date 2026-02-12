@@ -42,8 +42,8 @@ class DingTalkHttp:
             token_resp = await client.post(
                 url=DingTalkApi.build_access_token_url(),
                 json={
-                    "clientId": settings.DINGTALK_APP_KEY,
-                    "clientSecret": settings.DINGTALK_APP_SECRET,
+                    "clientId": settings.DINGTALK_CLIENT_ID,
+                    "clientSecret": settings.DINGTALK_CLIENT_SECRET,
                     "refreshToken": refresh_token,
                     "grantType": "refresh_token",
                 }

@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def DATABASE_AGENT_URL(self) -> str:
-        return f"postgresql+psycopg://{self.DB_USERNAME}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_AGENT_NAME}"
+        return f"postgresql://{self.DB_USERNAME}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_AGENT_NAME}"
 
 
 settings = Settings()

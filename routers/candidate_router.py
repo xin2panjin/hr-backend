@@ -16,6 +16,12 @@ from schemas.candidate_schema import ResumeUploadRespSchema, ResumePaseSchema, R
 from core.ocr import PaddleOcr
 from tasks import ocr_parse_resume_task
 from schemas import ResponseSchema
+from repository.position_repo import PositionRepo
+from repository.user_repo import UserRepo
+from tasks import run_candidate_agent
+from schemas.candidate_schema import CandidateSchema
+from schemas.position_schema import PositionSchema
+from schemas.user_schema import UserSchema
 
 # uv add aiofiles
 
@@ -126,3 +132,25 @@ async def resume_ocr_test():
     contents = await paddle_ocr.fetch_parsed_contents(jsonl_url)
     logger.info(contents)
     return "success"
+
+@router.get("/agent/test")
+async def agent_test(
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session_instance),
+):
+    async with session.begin():
+        candidate_repo = CandidateRepo(session=session)
+        position_repo = PositionRepo(session=session)
+        user_repo = UserRepo(session=session)
+
+        candidate_model = await candidate_repo.get_by_id("k6sEoXwqR7ZWa8oYWr7UUq")
+        position_model = await position_repo.get_by_id("YHre5Lq5J8L4UwhJpSxj44")
+        interviewer_model = await user_repo.get_by_id("Q3WtCYFcYgyxEvDp7CnUJ6")
+
+        background_tasks.add_task(
+            run_candidate_agent,
+            candidate=CandidateSchema.model_validate(candidate_model),
+            position=PositionSchema.model_validate(position_model),
+            interviewer=UserSchema.model_validate(interviewer_model),
+        )
+        return {"result": "success"}
