@@ -355,6 +355,31 @@ async def refuse_interview(
     except Exception as e:
         return f"修改候选人状态为拒绝面试失败！"
 
+@tool
+def get_current_time() -> str:
+    """
+    获取当前时间（北京时间）：年月日、时分秒、星期几、当月第几天
+    """
+    now_bj = datetime.now()
+
+    weekday_map = {
+        0: "星期一",
+        1: "星期二",
+        2: "星期三",
+        3: "星期四",
+        4: "星期五",
+        5: "星期六",
+        6: "星期日",
+    }
+    weekday_cn = weekday_map[now_bj.weekday()]
+
+    day_of_month = now_bj.day
+
+    return (
+        f"{now_bj.year}年{now_bj.month}月{now_bj.day}日 "
+        f"{now_bj.hour:02d}:{now_bj.minute:02d}:{now_bj.second:02d} "
+        f"{weekday_cn}（本月第{day_of_month}天）"
+    )
 
 class CandidateProcessAgent:
     def __init__(self,
@@ -386,7 +411,8 @@ class CandidateProcessAgent:
                 get_interviewer_available_slot,
                 send_interview_email,
                 confirm_interview_time,
-                refuse_interview
+                refuse_interview,
+                get_current_time
             ],
             checkpointer=self._checkpointer
         )
