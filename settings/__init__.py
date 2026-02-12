@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     DB_HOST: str = "127.0.0.1"
     DB_PORT: int = 5432
     DB_NAME: str = "hr_system"
+    DB_AGENT_NAME: str = "hr_system_agent"
 
     JWT_SECRET_KEY: str = "sfsdfsadfsdfjgafsd"
     # access_token：一般是2个小时过期
@@ -55,6 +56,11 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         return f"postgresql+psycopg://{self.DB_USERNAME}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+
+    @computed_field
+    @property
+    def DATABASE_AGENT_URL(self) -> str:
+        return f"postgresql+psycopg://{self.DB_USERNAME}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_AGENT_NAME}"
 
 
 settings = Settings()
