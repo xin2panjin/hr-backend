@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from utils.available_time import find_available_slot
 from utils.iso8601 import datetime_to_iso8601_beijing, iso8601_to_datetime_beijing
+from core.email_bot import EmailBot, EmailBotSettings
 
 
 async def get_dingtalk_access_token(user_id: str) -> str:
@@ -181,6 +182,49 @@ async def get_interviewer_available_slot(
     except Exception as e:
         return f"获取面试官可用时间失败：{e}"
 
+@tool
+async def send_interview_email(
+    interview_datetime_str: str,
+    runtime: ToolRuntime[CandidateAgentState],
+):
+    """
+    给候选人发送面试时间邀请（并非最终面试时间，后续可能还需要通过邮件来和候选人协商最终面试时间）
+    :param interview_datetime_str: 面试时间的字符串
+    """
+    candidate = runtime.state['candidate']
+    position = runtime.state['position']
+
+    email_bot_settings = EmailBotSettings(
+        imap_host=settings.EMAIL_BOT_IMAP_HOST,
+        smtp_host=settings.EMAIL_BOT_SMTP_HOST,
+        email=settings.EMAIL_BOT_EMAIL,
+        password=settings.EMAIL_BOT_PASSWORD,
+    )
+    async with EmailBot(email_bot_settings) as bot:
+        subject = "【知了课堂】面试邀请-协商面试时间"
+        body = f"""
+尊敬的{candidate.name}，
+您好！
+感谢您投递我司{position.title}职位。
+我们初步确定了您的面试时间，请您确认是否方便。
+面试时间：{interview_datetime_str}
+请您确认是否方便，如果方便，请您回复“确认”。
+如果不方便，请回复您方便的时间，我们将会重新协商面试时间。
+谢谢！
+        """
+        try:
+            await bot.send_email(
+                to=candidate.email,
+                subject=subject,
+                text=body,
+            )
+        except Exception as e:
+            logger.error(e)
+            return f"给候选人发送邮件失败：{e}"
+
+        return f"给候选人发送面试邀请邮件成功！面试时间初步确定为：{interview_datetime_str}"
+
+
 
 class CandidateProcessAgent:
     def __init__(self,
@@ -209,7 +253,8 @@ class CandidateProcessAgent:
             ],
             tools=[
                 score_for_candidate,
-                get_interviewer_available_slot
+                get_interviewer_available_slot,
+                send_interview_email
             ],
             checkpointer=self._checkpointer
         )
