@@ -20,6 +20,8 @@ class CandidateRepo(BaseRepo):
     async def create_candidate(self, candidate_info: dict) -> CandidateModel:
         candidate = CandidateModel(**candidate_info)
         self.session.add(candidate)
+        await self.session.flush([candidate])
+        await self.session.refresh(candidate, ['position', 'resume'])
         return candidate
 
     async def update_candidate_status(self, candidate_id: str, status: CandidateStatusEnum):

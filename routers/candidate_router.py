@@ -112,6 +112,7 @@ async def get_task_status(
 @router.post("/create", summary="创建候选人", response_model=ResponseSchema)
 async def create_candidate(
     candidate_data: CandidateCreateSchema,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session_instance),
     current_user: UserModel = Depends(get_current_user),
 ):
@@ -119,7 +120,18 @@ async def create_candidate(
         candidate_dict = candidate_data.model_dump()
         candidate_dict['creator_id'] = current_user.id
         candidate_repo = CandidateRepo(session=session)
-        await candidate_repo.create_candidate(candidate_dict)
+        candidate = await candidate_repo.create_candidate(candidate_dict)
+        candidate_schema = CandidateSchema.model_validate(candidate)
+        position_schema = PositionSchema.model_validate(candidate.position)
+        interviewer_schema = UserSchema.model_validate(candidate.position.creator)
+
+    background_tasks.add_task(
+        run_candidate_agent,
+        candidate=candidate_schema,
+        position=position_schema,
+        interviewer=interviewer_schema,
+    )
+
     return ResponseSchema()
 
 
