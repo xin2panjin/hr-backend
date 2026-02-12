@@ -16,3 +16,18 @@ class AgentCandidateSchema(BaseModel):
     skills: str | None = Field(None, description="候选人技能")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AgentCandidateScoreSchema(BaseModel):
+    """"
+    候选人与对应职位得分情况，为int类型的则表示得分值，范围再1-10之间，整形，不要出现不能转化为整形的字符串。
+    """
+    work_experience_score: int = Field(..., description="工作经验匹配度得分", ge=1, le=10)
+    technical_skills_score: int = Field(..., description="技术技能匹配度得分", ge=1, le=10)
+    soft_skills_score: int = Field(..., description="软技能潜力得分", ge=1, le=10)
+    educational_background_score: int = Field(..., description="教育背景得分", ge=1, le=10)
+    project_experience_score: int = Field(..., description="项目经验匹配度得分", ge=1, le=10)
+    overall_score: int = Field(..., description="总分", ge=1, le=10)
+    summary: str = Field(..., description="总结")
+    strengths: list[str] = Field(..., description="优点")
+    weaknesses: list[str] = Field(..., description="缺点")
