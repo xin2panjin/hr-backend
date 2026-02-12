@@ -32,6 +32,8 @@ from typing import Any
 from utils.available_time import find_available_slot
 from utils.iso8601 import datetime_to_iso8601_beijing, iso8601_to_datetime_beijing
 from core.email_bot import EmailBot, EmailBotSettings
+from repository.interview_repo import InterviewRepo
+from models.interview import InterviewResultEnum
 
 
 async def get_dingtalk_access_token(user_id: str) -> str:
@@ -224,6 +226,114 @@ async def send_interview_email(
 
         return f"给候选人发送面试邀请邮件成功！面试时间初步确定为：{interview_datetime_str}"
 
+@tool
+async def confirm_interview_time(
+    interview_datetime_str: str,
+    runtime: ToolRuntime[CandidateAgentState],
+):
+    """
+    确认最终的面试时间。这个工具会做以下四件事：
+    * 通过邮件，发送最终确认面试的时间给候选人
+    * 给面试官的钉钉创建一个面试的日程安排
+    * 在系统中创建一个面试预约记录
+    # 在系统中修改候选人的状态为待面试
+    :param interview_datetime_str: 面试时间，ISO8601格式的字符串
+    """
+    position = runtime.state['position']
+    candidate = runtime.state['candidate']
+    interviewer = runtime.state['interviewer']
+
+    try:
+        interview_datetime: datetime = iso8601_to_datetime_beijing(interview_datetime_str)
+        # 由于后面存储数据库，不能在日期中带时区，所以这里先处理一下
+        if interview_datetime.tzinfo is not None:
+            interview_datetime_without_tz = interview_datetime.astimezone(None).replace(tzinfo=None)
+    except Exception as e:
+        return f"{interview_datetime_str}格式化失败！{e}"
+
+    # 1. 通过邮件，发送最终确认面试的时间给候选人
+    email_bot_settings = EmailBotSettings(
+        imap_host=settings.EMAIL_BOT_IMAP_HOST,
+        smtp_host=settings.EMAIL_BOT_SMTP_HOST,
+        email=settings.EMAIL_BOT_EMAIL,
+        password=settings.EMAIL_BOT_PASSWORD,
+    )
+    async with EmailBot(email_bot_settings) as bot:
+        subject = "【知了课堂】面试时间确定"
+        body = f"""
+        "尊敬的{candidate.name}，
+        面试时间已确定：
+        {interview_datetime_str}
+        请您准时参加面试。该邮件无需再回复。谢谢！
+        """
+        try:
+            await bot.send_email(
+                to=candidate.email,
+                subject=subject,
+                text=body,
+            )
+        except Exception as e:
+            logger.error(e)
+            return f"给候选人发送邮件失败：{e}"
+
+    # 2. 给面试官的钉钉创建一个面试的日程安排
+    union_id: str|None = None
+    try:
+        async with AsyncSessionFactory() as session:
+            async with session.begin():
+                user_repo = UserRepo(session)
+                dingding_user = await user_repo.get_dingding_user(user_id=interviewer.id)
+                if not dingding_user:
+                    return "面试官没有绑定钉钉账号！无法创建日程安排！"
+                union_id = dingding_user.union_id
+    except Exception as e:
+        return f"面试官用户信息获取失败！"
+
+    try:
+        access_token: str = await get_dingtalk_access_token(interviewer.id)
+    except Exception as e:
+        return f"面试官access_token获取失败！{e}"
+
+    try:
+        dingtalk_http = DingTalkHttp()
+        end_datetime: datetime = interview_datetime + timedelta(hours=1)
+        await dingtalk_http.create_calendar(
+            union_id=union_id,
+            access_token=access_token,
+            summary=f"面试安排：{position.title} - {candidate.name}",
+            start_datetime=interview_datetime,
+            end_datetime=end_datetime,
+        )
+    except Exception as e:
+        return f"给面试官创建钉钉日程安排失败！{e}"
+
+    try:
+        async with AsyncSessionFactory() as session:
+            async with session.begin():
+                interview_repo = InterviewRepo(session)
+                # 3. 在数据库中创建一个面试预约记录
+                await interview_repo.create_interview({
+                    # 面试时间因为是存储到postgresql数据库中，现在是只能存储没有带时区的日期
+                    "scheduled_time": interview_datetime_without_tz,
+                    "result": InterviewResultEnum.PENDING,
+                    "candidate_id": candidate.id,
+                    "interviewer_id": interviewer.id,
+                })
+                # 4. 在数据库中修改候选人的状态为待面试
+                candidate_repo = CandidateRepo(session)
+                await candidate_repo.update_candidate_status(
+                    candidate_id=candidate.id,
+                    status=CandidateStatusEnum.WAITING_FOR_INTERVIEW,
+                )
+    except Exception as e:
+        return f"在系统中创建面试预约记录和候选人状态修改失败！{e}"
+
+    return f"""
+    * 给候选人发送面试时间执行成功！
+    * 给面试官创建钉钉日程安排成功！
+    * 在系统中创建面试预约成功！
+    * 在系统中修改候选人状态为待面试成功！
+    """
 
 
 class CandidateProcessAgent:
@@ -254,7 +364,8 @@ class CandidateProcessAgent:
             tools=[
                 score_for_candidate,
                 get_interviewer_available_slot,
-                send_interview_email
+                send_interview_email,
+                confirm_interview_time
             ],
             checkpointer=self._checkpointer
         )
