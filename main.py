@@ -9,6 +9,7 @@ from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache import FastAPICache
 from routers.candidate_router import router as candidate_router
 from scheduler import start_email_polling
+from routers.dashboard_router import router as dashboard_router
 
 
 @asynccontextmanager
@@ -46,6 +47,7 @@ app.add_middleware(
 app.include_router(user_router)
 app.include_router(position_router)
 app.include_router(candidate_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")
