@@ -1,6 +1,6 @@
 import os.path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, BackgroundTasks, Query
 
 from core.cache import HRCache
 from dependencies import get_session_instance, get_current_user, get_cache_instance
@@ -19,9 +19,10 @@ from schemas import ResponseSchema
 from repository.position_repo import PositionRepo
 from repository.user_repo import UserRepo
 from tasks import run_candidate_agent
-from schemas.candidate_schema import CandidateSchema
+from schemas.candidate_schema import CandidateSchema, CandidateListSchema
 from schemas.position_schema import PositionSchema
 from schemas.user_schema import UserSchema
+from models.candidate import CandidateStatusEnum
 
 # uv add aiofiles
 
@@ -133,6 +134,27 @@ async def create_candidate(
     )
 
     return ResponseSchema()
+
+@router.get("/list", summary="获取候选人列表", response_model=CandidateListSchema)
+async def get_candidate_list(
+    page: int = Query(1, description="页码"),
+    size: int = Query(10, description="每页的数量"),
+    position_id: str|None = Query(None, description="职位的ID"),
+    status: CandidateStatusEnum|None = Query(None, description="候选人状态"),
+    session: AsyncSession = Depends(get_session_instance),
+    current_user: UserModel = Depends(get_current_user),
+):
+    async with session.begin():
+        candidate_repo = CandidateRepo(session=session)
+        candidates = await candidate_repo.get_list(
+            current_user=current_user,
+            position_id=position_id,
+            status=status,
+            page=page,
+            size=size,
+        )
+        return {"candidates": candidates}
+
 
 
 @router.get("/resume/ocr/test")

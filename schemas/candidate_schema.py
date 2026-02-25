@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict
 from schemas.user_schema import UserSchema
 from core.cache import TaskInfoSchema
-from models.candidate import GenderEnum
+from models.candidate import GenderEnum, CandidateStatusEnum
 from schemas.position_schema import PositionSchema
 
 
@@ -54,9 +54,13 @@ class CandidateSchema(BaseModel):
     self_evaluation: str | None = Field(None, description="候选人自我评价")
     other_information: str | None = Field(None, description="候选人其他信息")
     skills: str | None = Field(None, description="候选人技能")
+    status: CandidateStatusEnum | str | None = Field(None, description="候选人状态")
 
     position: PositionSchema = Field(..., description="候选人申请的职位信息")
     resume: ResumeSchema = Field(..., description="候选人的简历信息")
     creator: UserSchema = Field(..., description="创建该候选人的信息")
 
     model_config = ConfigDict(from_attributes=True)
+
+class CandidateListSchema(BaseModel):
+    candidates: list[CandidateSchema]

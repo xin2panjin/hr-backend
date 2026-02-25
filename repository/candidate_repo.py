@@ -1,9 +1,11 @@
+from models.positions import PositionModel
 from . import BaseRepo
 from models.candidate import ResumeModel, CandidateModel
 from sqlalchemy import select, update
 from models.candidate import CandidateAIScoreModel
 from sqlalchemy.orm import selectinload
 from models.candidate import CandidateStatusEnum
+from models.user import UserModel
 
 
 class ResumeRepo(BaseRepo):
@@ -38,6 +40,50 @@ class CandidateRepo(BaseRepo):
                 selectinload(CandidateModel.creator)
             )
         )
+
+    async def get_list(
+        self,
+        current_user: UserModel,
+        position_id: str|None = None,
+        status: CandidateStatusEnum|None = None,
+        page: int = 1,
+        size: int = 10
+    ):
+        stmt = select(CandidateModel)
+        # 按照用户的角色来查找数据
+        # 1. 如果是superuser，那么可以获取所有的候选人
+        # 2. 如果是hr，那么可以获取所负责部门的候选人
+        # 3. 如果是部门成员，那么可以获取自己发布的职位的候选人
+        if current_user.is_superuser:
+            pass
+        elif current_user.is_hr:
+            hr_user = await self.session.scalar(
+                select(UserModel)
+                .where(UserModel.id == current_user.id)
+                .options(selectinload(UserModel.managed_departments))
+            )
+            # 提取hr所负责的部门的id
+            managed_department_ids = [
+                d.id for d in hr_user.managed_departments
+            ]
+            if len(managed_department_ids) == 0:
+                return []
+            # 用连接的形式过滤候选人
+            stmt = stmt.join(PositionModel).where(PositionModel.department_id.in_(managed_department_ids))
+        else:
+            # 普通成员
+            stmt = stmt.join(PositionModel).where(PositionModel.creator_id == current_user.id)
+
+        if position_id is not None:
+            stmt = stmt.where(CandidateModel.position_id == position_id)
+
+        if status is not None:
+            stmt = stmt.where(CandidateModel.status == status)
+
+        offset = (page - 1) * size
+        stmt = stmt.offset(offset).limit(size).order_by(CandidateModel.created_at.desc())
+        return await self.session.scalars(stmt)
+
 
 
 class CandidateAIScoreRepo(BaseRepo):
