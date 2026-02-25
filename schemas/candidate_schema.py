@@ -71,3 +71,21 @@ class CandidateStatusUpdateSchema(BaseModel):
 
 class CandidateListSchema(BaseModel):
     candidates: list[CandidateSchema]
+
+class CandidateAIScoreSchema(BaseModel):
+    id: str
+    work_experience_score: int
+    technical_skills_score: int
+    soft_skills_score: int
+    educational_background_score: int
+    project_experience_score: int
+    overall_score: int
+    summary: str
+    strengths: list[str]
+    weaknesses: list[str]
+    candidate_id: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+class CandidateAIScoreRespSchema(BaseModel):
+    ai_score: CandidateAIScoreSchema
