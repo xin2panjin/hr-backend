@@ -25,6 +25,8 @@ class PositionSchema(PositionBaseSchema):
     id: str = Field(..., description="职位ID")
     creator: UserSchema = Field(..., description="职位创建者")
     department: DepartmentSchema = Field(..., description="职位所属部门")
+    created_at: datetime = Field(..., description='职位创建时间')
+    is_open: bool = Field(..., description="是否开发")
 
     model_config = ConfigDict(from_attributes=True)
 

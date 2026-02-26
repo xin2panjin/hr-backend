@@ -51,5 +51,8 @@ async def delete_position(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="没有权限执行操作！")
 
         # 执行删除操作
-        await position_repo.delete_position(position_id)
+        try:
+            await position_repo.delete_position(position_id)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="职位删除失败！")
         return ResponseSchema()
