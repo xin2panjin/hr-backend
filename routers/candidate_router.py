@@ -27,6 +27,7 @@ from repository.interview_repo import InterviewRepo
 from models.interview import InterviewResultEnum
 from models.interview import InterviewModel
 from repository.candidate_repo import CandidateAIScoreRepo
+from pathlib import Path
 
 # uv add aiofiles
 
@@ -88,8 +89,9 @@ async def resume_upload(
     # 4. 将简历数据存储到数据库中
     async with session.begin():
         resume_repo = ResumeRepo(session=session)
-        resume = await resume_repo.create_resume(file_path=file_path, uploader_id=current_user.id)
-
+        # 做一个更改，在数据库中只保存文件名
+        file_name = Path(file_path).name
+        resume = await resume_repo.create_resume(file_path=file_name, uploader_id=current_user.id)
     return {"resume": resume}
 
 # 1. 发起了一个简历识别的请求，创建一个后台任务，把task_id返回给前端

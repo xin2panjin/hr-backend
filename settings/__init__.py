@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     EMAIL_BOT_EMAIL: str = Field(..., validation_alias="MAIL_USERNAME")
     EMAIL_BOT_PASSWORD: str = Field(..., validation_alias="MAIL_PASSWORD")
 
+    # 阿里云百炼平台的API_KEY
+    DASHSCOPE_API_KEY: str = Field(..., validation_alias="DASHSCOPE_API_KEY")
+
 
     # 钉钉相关的配置
     DINGTALK_CLIENT_ID: str = Field(..., validation_alias="DINGTALK_APP_KEY")
