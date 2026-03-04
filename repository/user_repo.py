@@ -39,6 +39,11 @@ class UserRepo(BaseRepo):
         users = await self.session.scalars(stmt)
         return users.all()
 
+    async def get_hr_list(self):
+        stmt = select(UserModel).where(UserModel.is_hr == True).options(selectinload(UserModel.managed_departments))
+        hrs = await self.session.scalars(stmt)
+        return hrs.all()
+
     async def get_user_count(self, department_id: str|None = None):
         stmt = select(func.count(UserModel.id))
         if department_id:

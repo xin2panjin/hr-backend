@@ -10,7 +10,8 @@ from schemas.user_schema import (
     UserStatusUpdateSchema,
     DepartmentListRespSchema,
     DingdingUserRespSchema,
-    AssignDepartmentSchema
+    AssignDepartmentSchema,
+    HrListRespSchema
 )
 from dependencies import (
     get_session_instance,
@@ -286,3 +287,13 @@ async def assign_department(
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return ResponseSchema()
+
+@router.get("/hr/list", summary="获取HR列表", response_model=HrListRespSchema)
+async def get_hr_list(
+    session: AsyncSession = Depends(get_session_instance),
+    _: UserModel = Depends(get_super_user),
+):
+    async with session.begin():
+        user_repo = UserRepo(session)
+        hrs = await user_repo.get_hr_list()
+        return {"hrs": hrs}
