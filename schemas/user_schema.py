@@ -48,6 +48,7 @@ class UserRegisterSchema(BaseModel):
 
 class UserListRespSchema(BaseModel):
     users: List[UserSchema]
+    total: int
 
 class UserStatusUpdateSchema(BaseModel):
     user_id: str = Field(..., description="员工的ID")

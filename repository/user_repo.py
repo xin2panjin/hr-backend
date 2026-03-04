@@ -3,6 +3,7 @@ from models.user import UserModel, DingdingUserModel, DepartmentModel
 from sqlalchemy import select, delete
 from typing import Sequence, List
 from sqlalchemy.orm import selectinload
+from sqlalchemy import func
 
 
 class UserRepo(BaseRepo):
@@ -37,6 +38,13 @@ class UserRepo(BaseRepo):
         stmt = stmt.limit(limit).offset(offset).order_by(UserModel.created_at.desc())
         users = await self.session.scalars(stmt)
         return users.all()
+
+    async def get_user_count(self, department_id: str|None = None):
+        stmt = select(func.count(UserModel.id))
+        if department_id:
+            stmt = stmt.where(UserModel.department_id == department_id)
+        total = await self.session.scalar(stmt)
+        return total
 
     async def set_dingding_user(self, user_id: str, dingding_user_data: dict) -> DingdingUserModel:
         user = await self.get_by_id(user_id)

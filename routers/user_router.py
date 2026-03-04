@@ -147,7 +147,8 @@ async def user_list(
     async with session.begin():
         user_repo = UserRepo(session)
         users = await user_repo.get_user_list(page=page, size=size, department_id=department_id)
-    return {"users": users}
+        total = await user_repo.get_user_count(department_id=department_id)
+    return {"users": users, "total": total}
 
 @router.patch("/status/update", summary="修改员工状态", response_model=ResponseSchema)
 async def update_status(
