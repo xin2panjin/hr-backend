@@ -49,7 +49,8 @@ app.include_router(user_router)
 app.include_router(position_router)
 app.include_router(candidate_router)
 app.include_router(dashboard_router)
-app.include_router(media_router)
+if settings.DEBUG:
+    app.include_router(media_router)
 
 
 @app.get("/")
