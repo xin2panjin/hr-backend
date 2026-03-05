@@ -23,7 +23,8 @@ logger.add(
     compression="zip",       # 压缩旧日志为 zip 文件
     level="INFO",            # 最低记录级别
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
-    encoding="utf-8"
+    encoding="utf-8",
+    enqueue=True,
 )
 
 
@@ -59,10 +60,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(user_router)
-app.include_router(position_router)
-app.include_router(candidate_router)
-app.include_router(dashboard_router)
+app.include_router(user_router, prefix="/api")
+app.include_router(position_router, prefix="/api")
+app.include_router(candidate_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")
 if settings.DEBUG:
     app.include_router(media_router)
 
