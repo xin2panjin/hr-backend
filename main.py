@@ -12,6 +12,18 @@ from scheduler import start_email_polling
 from routers.dashboard_router import router as dashboard_router
 from routers.media_router import router as media_router
 
+from loguru import logger
+
+logger.add(
+    "log/app.log",
+    rotation="10 MB",        # 每个文件最大 10MB
+    retention="7 days",      # 保留最近 7 天的日志
+    compression="zip",       # 压缩旧日志为 zip 文件
+    level="INFO",            # 最低记录级别
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+    encoding="utf-8"
+)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
