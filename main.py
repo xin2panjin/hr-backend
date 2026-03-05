@@ -14,6 +14,8 @@ from routers.media_router import router as media_router
 
 from loguru import logger
 
+logger.remove()
+
 logger.add(
     "log/app.log",
     rotation="10 MB",        # 每个文件最大 10MB
