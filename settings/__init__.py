@@ -79,7 +79,6 @@
 #
 # # print(f"settings.password: {settings.MAIL_PASSWORD1}")
 
-
 from datetime import timedelta
 
 from pydantic_settings import BaseSettings
@@ -106,7 +105,7 @@ class Settings(BaseSettings):
 
     # redis配置
     REDIS_HOST: str = Field('127.0.0.1', validation_alias="REDIS_HOST")
-    REDIS_PORT: int = Field(6379, validation_alias="REDIS_PORT")
+    REDIS_PORT: int = Field(6389, validation_alias="REDIS_PORT")
 
     # 邀请码过期时间
     INVITE_CODE_EXPIRE: int = 60*60*24*2
@@ -158,5 +157,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-# print(f"settings.password: {settings.MAIL_PASSWORD1}")

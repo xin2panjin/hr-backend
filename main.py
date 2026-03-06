@@ -44,7 +44,7 @@ async def lifespan(_: FastAPI):
     yield
     # 2. yield之后的代码，是程序即将退出之前执行的
     await redis_client.close()
-    if bot.is_connected():
+    if bot.is_connected:
         await bot.close()
     if scheduler.running:
         await scheduler.shutdown()
