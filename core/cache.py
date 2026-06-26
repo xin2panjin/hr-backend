@@ -42,6 +42,8 @@ class HRCache(metaclass=SingletonMeta):
     async def get_dingtalk_info(self, user_id: str):
         key = f"{self.dingtalk_prefix}{user_id}"
         value = await self.get(key)
+        if value is None:
+            return None
         return DingTalkTokenInfoSchema.model_validate_json(value)
 
     async def set_task_info(self, task_info: TaskInfoSchema):

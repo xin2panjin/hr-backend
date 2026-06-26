@@ -56,7 +56,7 @@ app = FastAPI(lifespan=lifespan)
 # 允许跨域
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,7 +67,10 @@ app.include_router(position_router)
 app.include_router(candidate_router)
 app.include_router(dashboard_router)
 if settings.DEBUG:
+    from routers.dev_router import router as dev_router
+
     app.include_router(media_router)
+    app.include_router(dev_router)
 
 
 @app.get("/")

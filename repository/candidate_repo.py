@@ -38,8 +38,9 @@ class CandidateRepo(BaseRepo):
             select(CandidateModel)
             .where(CandidateModel.id==candidate_id)
             .options(
-                selectinload(CandidateModel.position),
-                selectinload(CandidateModel.resume),
+                selectinload(CandidateModel.position).selectinload(PositionModel.creator),
+                selectinload(CandidateModel.position).selectinload(PositionModel.department),
+                selectinload(CandidateModel.resume).selectinload(ResumeModel.uploader),
                 selectinload(CandidateModel.creator)
             )
         )

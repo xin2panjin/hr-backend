@@ -146,7 +146,7 @@ async def get_interviewer_available_slot(
         async with session.begin():
             try:
                 user_repo = UserRepo(session)
-                dingding_user: DingdingUserModel = user_repo.get_dingding_user(user_id=interviewer.user_id)
+                dingding_user: DingdingUserModel = await user_repo.get_dingding_user(user_id=interviewer.id)
                 if not dingding_user:
                     return f"获取候选人可用时间失败，没有绑定钉钉账号！"
                 union_id = dingding_user.union_id
@@ -155,7 +155,7 @@ async def get_interviewer_available_slot(
 
     try:
         # 2. 获取access_token
-        access_token: str = await get_dingtalk_access_token(interviewer.user_id)
+        access_token: str = await get_dingtalk_access_token(interviewer.id)
     except Exception as e:
         logger.error(e)
         return f"获取面试官可用时间失败：{e}"

@@ -28,7 +28,7 @@ from fastapi.exceptions import HTTPException
 from fastapi import status
 import string
 import random
-from tasks import send_invite_email_task
+from tasks.email_tasks import send_invite_email_task
 from schemas import ResponseSchema
 from settings import settings
 from urllib.parse import urlencode, urljoin
