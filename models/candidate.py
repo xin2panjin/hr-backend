@@ -13,10 +13,10 @@ from .user import UserModel, DepartmentModel
 class CandidateStatusEnum(str, enum.Enum):
     # 1. 已投递
     APPLICATION = "已投递"
-    # 2. AI筛选失败
-    AI_FILTER_FAILED = "AI筛选失败"
-    # 3. AI筛选成功
-    AI_FILTER_PASSED = "AI筛选成功"
+    # 2. AI筛选未通过
+    AI_FILTER_REJECTED = "AI筛选未通过"
+    # 3. AI筛选通过
+    AI_FILTER_PASSED = "AI筛选通过"
     # 4. 待面试
     WAITING_FOR_INTERVIEW = "待面试"
     # 5. 拒绝面试

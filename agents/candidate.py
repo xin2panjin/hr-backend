@@ -121,7 +121,7 @@ async def score_for_candidate(
                     candidate_score_dict=candiate_score.model_dump()
                 )
                 # 2. 判断得分情况，如果超过8分，那么修改状态为AI_PASS，否则就是AI_FAILED
-                status = CandidateStatusEnum.AI_FILTER_FAILED
+                status = CandidateStatusEnum.AI_FILTER_REJECTED
                 if candiate_score.overall_score > 8:
                     status = CandidateStatusEnum.AI_FILTER_PASSED
 

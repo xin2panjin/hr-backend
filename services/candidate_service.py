@@ -11,7 +11,7 @@ from services.interview_service import InterviewService
 class CandidateService:
     STATUS_FLOW = [
         CandidateStatusEnum.APPLICATION,
-        CandidateStatusEnum.AI_FILTER_FAILED,
+        CandidateStatusEnum.AI_FILTER_REJECTED,
         CandidateStatusEnum.AI_FILTER_PASSED,
         CandidateStatusEnum.WAITING_FOR_INTERVIEW,
         CandidateStatusEnum.REFUSED_INTERVIEW,
