@@ -1,4 +1,30 @@
 .jbeval
-.venv
 提交历史.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local config and secrets
+.env
+.env.*
+!.env.example
+
+# IDE / OS files
+.idea/
+.vscode/
+.DS_Store
+
+# Runtime files
+log/
+logs/
 upload/

@@ -81,7 +81,7 @@
 
 from datetime import timedelta
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import computed_field, Field
 import os
 
@@ -89,6 +89,11 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
     # DB
     DB_USERNAME: str = Field(..., validation_alias="DB_USERNAME")
     DB_PASSWORD: str = Field(..., validation_alias="DB_PASSWORD")
@@ -119,6 +124,7 @@ class Settings(BaseSettings):
     MAIL_FROM_NAME: str = "知了课堂"
     MAIL_STARTTLS: bool = True
     MAIL_SSL_TLS: bool = False
+    ENABLE_EMAIL_POLLING: bool = Field(False, validation_alias="ENABLE_EMAIL_POLLING")
 
     # 邮箱机器人配置
     EMAIL_BOT_IMAP_HOST: str = "imap.qq.com"

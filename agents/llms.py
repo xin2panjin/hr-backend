@@ -1,7 +1,7 @@
-import os
 from langchain_openai import ChatOpenAI
+from settings import settings
 
-api_key = os.getenv("DASHSCOPE_API_KEY")
+api_key = settings.DASHSCOPE_API_KEY
 
 qwen_llm = ChatOpenAI(
     model="qwen3-max",
