@@ -8,6 +8,7 @@ from repository.candidate_repo import CandidateRepo
 from schemas.candidate_schema import ResumeUploadRespSchema, ResumePaseSchema, ResumeParseTaskRespSchema, ResumeParseTaskInfoRespSchema, CandidateCreateSchema, CandidateStatusUpdateSchema, CandidateAIScoreRespSchema
 from schemas import ResponseSchema
 from tasks.candidate_tasks import run_candidate_agent_by_id
+from tasks.candidate_index_tasks import sync_candidate_index_batch_task
 from tasks.resume_tasks import ocr_parse_resume_task
 from schemas.candidate_schema import CandidateListSchema
 from models.candidate import CandidateStatusEnum
@@ -70,6 +71,13 @@ async def create_candidate(
     async with session.begin():
         candidate_service = CandidateService(session=session)
         candidate_id = await candidate_service.create_candidate(candidate_data, current_user)
+
+    # 创建候选人后会写入 candidate_index_outbox。
+    # 这里在事务提交后异步同步到 Milvus，避免请求阻塞在向量生成和 Milvus 写入上。
+    background_tasks.add_task(
+        sync_candidate_index_batch_task,
+        limit=20,
+    )
 
     background_tasks.add_task(
         run_candidate_agent_by_id,
