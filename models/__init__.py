@@ -65,3 +65,4 @@ from . import user
 from . import positions
 from . import interview
 from . import candidate
+from . import candidate_search

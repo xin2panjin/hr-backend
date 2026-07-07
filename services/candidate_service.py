@@ -6,7 +6,11 @@ from models.user import UserModel
 from repository.candidate_repo import CandidateRepo
 from schemas.candidate_schema import CandidateCreateSchema, CandidateStatusUpdateSchema
 from services.interview_service import InterviewService
-
+from repository.candidate_search_repo import (
+    CandidateIndexOutboxRepo,
+    CandidateSearchProfileRepo,
+)
+from services.candidate_search_profile_service import CandidateSearchProfileService
 
 class CandidateService:
     STATUS_FLOW = [
@@ -26,10 +30,15 @@ class CandidateService:
         session: AsyncSession,
         candidate_repo: CandidateRepo | None = None,
         interview_service: InterviewService | None = None,
+        search_profile_service: CandidateSearchProfileService | None = None,
     ):
         self.session = session
         self.candidate_repo = candidate_repo or CandidateRepo(session)
         self.interview_service = interview_service or InterviewService(session)
+        self.search_profile_service = search_profile_service or CandidateSearchProfileService(
+            profile_repo=CandidateSearchProfileRepo(session),
+            outbox_repo=CandidateIndexOutboxRepo(session),
+        )
 
     async def create_candidate(
         self,
@@ -40,6 +49,9 @@ class CandidateService:
         candidate_dict["creator_id"] = current_user.id
 
         candidate = await self.candidate_repo.create_candidate(candidate_dict)
+        # 候选人创建成功后，同步生成脱敏检索画像，并写入索引 outbox。
+        # 这里只写 PostgreSQL，不直接调用 Milvus，避免业务事务和向量库强耦合。
+        await self.search_profile_service.rebuild_candidate_profile(candidate)
         return candidate.id
 
     async def update_candidate_status(
