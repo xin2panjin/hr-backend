@@ -12,6 +12,7 @@ from scheduler import start_email_polling
 from routers.dashboard_router import router as dashboard_router
 from routers.media_router import router as media_router
 from routers.talent_search_router import router as talent_search_router
+from routers.hr_assistant_router import router as hr_assistant_router
 
 from loguru import logger
 
@@ -79,3 +80,5 @@ async def root():
     return {"message": "Hello World"}
 
 app.include_router(talent_search_router)
+
+app.include_router(hr_assistant_router)
