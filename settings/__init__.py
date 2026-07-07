@@ -140,6 +140,21 @@ class Settings(BaseSettings):
     DINGTALK_CLIENT_ID: str = Field(..., validation_alias="DINGTALK_APP_KEY")
     DINGTALK_CLIENT_SECRET: str = Field(..., validation_alias="DINGTALK_APP_SECRET")
 
+    # Milvus 向量库配置
+    MILVUS_URI: str = Field("http://127.0.0.1:19530", validation_alias="MILVUS_URI")
+    MILVUS_TOKEN: str | None = Field(None, validation_alias="MILVUS_TOKEN")
+    MILVUS_DATABASE: str = Field("default", validation_alias="MILVUS_DATABASE")
+    MILVUS_CANDIDATE_COLLECTION: str = Field(
+        "candidate_profiles_v1",
+        validation_alias="MILVUS_CANDIDATE_COLLECTION",
+    )
+
+    # 候选人画像向量维度，必须和后续 Embedding 模型输出维度一致
+    MILVUS_CANDIDATE_VECTOR_DIM: int = Field(
+        1024,
+        validation_alias="MILVUS_CANDIDATE_VECTOR_DIM",
+    )
+
     # 前端和后端的域名
     BACKEND_BASE_URL: str = Field("https://shaina-changeless-danika.ngrok-free.dev", validation_alias="BACKEND_BASE_URL")
 
