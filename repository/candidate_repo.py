@@ -103,6 +103,54 @@ class CandidateRepo(BaseRepo):
             func.date(CandidateModel.created_at)
         )
         return (await self.session.execute(stmt)).all()
+    async def list_visible_by_ids(
+        self,
+        *,
+        candidate_ids: list[str],
+        current_user: UserModel,
+    ) -> list[CandidateModel]:
+        """按候选人ID列表查询，并做 PostgreSQL 权限复核。"""
+
+        if not candidate_ids:
+            return []
+
+        stmt = (
+            select(CandidateModel)
+            .where(CandidateModel.id.in_(candidate_ids))
+            .options(
+                selectinload(CandidateModel.position).selectinload(PositionModel.department),
+                selectinload(CandidateModel.position).selectinload(PositionModel.creator),
+                selectinload(CandidateModel.resume).selectinload(ResumeModel.uploader),
+                selectinload(CandidateModel.creator),
+            )
+        )
+
+        if current_user.is_superuser:
+            pass
+        elif current_user.is_hr:
+            hr_user = await self.session.scalar(
+                select(UserModel)
+                .where(UserModel.id == current_user.id)
+                .options(selectinload(UserModel.managed_departments))
+            )
+            managed_department_ids = [d.id for d in hr_user.managed_departments]
+            if not managed_department_ids:
+                return []
+
+            stmt = stmt.join(PositionModel).where(
+                PositionModel.department_id.in_(managed_department_ids)
+            )
+        else:
+            stmt = stmt.join(PositionModel).where(
+                PositionModel.creator_id == current_user.id
+            )
+
+        result = await self.session.scalars(stmt)
+        candidates = list(result)
+
+        # 按 Milvus 召回顺序返回，避免 SQL 查询打乱排序。
+        order_map = {candidate_id: index for index, candidate_id in enumerate(candidate_ids)}
+        return sorted(candidates, key=lambda c: order_map.get(c.id, 999999))
 
 
 
