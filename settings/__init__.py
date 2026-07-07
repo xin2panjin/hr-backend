@@ -149,6 +149,13 @@ class Settings(BaseSettings):
         validation_alias="MILVUS_CANDIDATE_COLLECTION",
     )
 
+    # Embedding 模型配置
+    EMBEDDING_MODEL: str = Field("text-embedding-v4", validation_alias="EMBEDDING_MODEL")
+    EMBEDDING_BASE_URL: str = Field(
+        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        validation_alias="EMBEDDING_BASE_URL",
+    )
+
     # 候选人画像向量维度，必须和后续 Embedding 模型输出维度一致
     MILVUS_CANDIDATE_VECTOR_DIM: int = Field(
         1024,

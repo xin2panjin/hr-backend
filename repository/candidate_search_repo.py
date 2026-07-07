@@ -101,3 +101,56 @@ class CandidateIndexOutboxRepo(BaseRepo):
 
         event = await self.session.scalar(stmt)
         return event
+    async def list_pending_events(self, limit: int = 20) -> list[CandidateIndexOutboxModel]:
+        """获取待处理的索引事件。"""
+
+        stmt = (
+            select(CandidateIndexOutboxModel)
+            .where(CandidateIndexOutboxModel.status == CandidateIndexEventStatusEnum.PENDING)
+            .order_by(CandidateIndexOutboxModel.created_at.asc())
+            .limit(limit)
+        )
+        result = await self.session.scalars(stmt)
+        return list(result)
+
+    async def mark_processing(self, event_id: str) -> None:
+        """标记事件处理中。"""
+
+        stmt = (
+            update(CandidateIndexOutboxModel)
+            .where(CandidateIndexOutboxModel.id == event_id)
+            .values(
+                status=CandidateIndexEventStatusEnum.PROCESSING,
+                updated_at=datetime.now(),
+            )
+        )
+        await self.session.execute(stmt)
+
+    async def mark_succeeded(self, event_id: str) -> None:
+        """标记事件处理成功。"""
+
+        stmt = (
+            update(CandidateIndexOutboxModel)
+            .where(CandidateIndexOutboxModel.id == event_id)
+            .values(
+                status=CandidateIndexEventStatusEnum.SUCCEEDED,
+                last_error=None,
+                updated_at=datetime.now(),
+            )
+        )
+        await self.session.execute(stmt)
+
+    async def mark_failed(self, event_id: str, error: str) -> None:
+        """标记事件处理失败。"""
+
+        stmt = (
+            update(CandidateIndexOutboxModel)
+            .where(CandidateIndexOutboxModel.id == event_id)
+            .values(
+                status=CandidateIndexEventStatusEnum.FAILED,
+                last_error=error[:2000],
+                retry_count=CandidateIndexOutboxModel.retry_count + 1,
+                updated_at=datetime.now(),
+            )
+        )
+        await self.session.execute(stmt)
