@@ -47,6 +47,12 @@ class FakeInterviewService:
             raise HTTPException(status_code=400, detail="变更为面试未通过时必须填写未通过原因")
         self.rejected_calls.append((candidate_id, status_data, current_user))
 
+class FakeSearchProfileService:
+    def __init__(self):
+        self.rebuild_calls = []
+
+    async def rebuild_candidate_profile(self, candidate):
+        self.rebuild_calls.append(candidate)
 
 def build_user(user_id="user-1"):
     department = SimpleNamespace(
@@ -120,10 +126,12 @@ def build_candidate(candidate_id, status):
 @pytest.mark.asyncio
 async def test_create_candidate_adds_creator_and_returns_candidate_id():
     candidate_repo = FakeCandidateRepo()
+    search_profile_service = FakeSearchProfileService()
     service = CandidateService(
         session=None,
         candidate_repo=candidate_repo,
         interview_service=FakeInterviewService(),
+        search_profile_service=search_profile_service,
     )
     current_user = build_user("creator-1")
     candidate_data = CandidateCreateSchema(
@@ -137,6 +145,7 @@ async def test_create_candidate_adds_creator_and_returns_candidate_id():
 
     assert candidate_repo.created_candidate_info["creator_id"] == "creator-1"
     assert candidate_id == "candidate-1"
+    assert search_profile_service.rebuild_calls == [candidate_repo.candidate]
 
 
 @pytest.mark.asyncio

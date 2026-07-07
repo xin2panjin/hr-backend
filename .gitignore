@@ -28,3 +28,8 @@ env/
 log/
 logs/
 upload/
+
+# Local generated artifacts
+output/
+tmp/
+agents/test.ipynb

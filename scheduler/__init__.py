@@ -4,7 +4,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from core.email_bot import EmailBot
 from core.email_bot.settings import EmailBotSettings
 from loguru import logger
-from agents.candidate import CandidateProcessAgent
+from agents.candidate.agent import CandidateProcessAgent
 from langchain.messages import HumanMessage
 from settings import settings
 from core.cache import HRCache

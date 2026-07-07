@@ -1,5 +1,8 @@
+from __future__ import annotations
 import enum
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
+if TYPE_CHECKING:
+    from .candidate import CandidateModel
 
 from sqlalchemy import (
     String, Text, Integer,

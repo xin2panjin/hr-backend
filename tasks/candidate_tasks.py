@@ -1,4 +1,4 @@
-from agents.candidate import CandidateProcessAgent
+from agents.candidate.agent import CandidateProcessAgent
 from models import AsyncSessionFactory
 from repository.candidate_repo import CandidateRepo
 from schemas.candidate_schema import CandidateSchema
