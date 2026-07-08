@@ -41,7 +41,8 @@ class CandidateRepo(BaseRepo):
                 selectinload(CandidateModel.position).selectinload(PositionModel.creator),
                 selectinload(CandidateModel.position).selectinload(PositionModel.department),
                 selectinload(CandidateModel.resume).selectinload(ResumeModel.uploader),
-                selectinload(CandidateModel.creator)
+                selectinload(CandidateModel.creator),
+                selectinload(CandidateModel.ai_score),
             )
         )
 
@@ -122,6 +123,7 @@ class CandidateRepo(BaseRepo):
                 selectinload(CandidateModel.position).selectinload(PositionModel.creator),
                 selectinload(CandidateModel.resume).selectinload(ResumeModel.uploader),
                 selectinload(CandidateModel.creator),
+                selectinload(CandidateModel.ai_score),
             )
         )
 

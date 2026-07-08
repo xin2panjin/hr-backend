@@ -1,5 +1,5 @@
 import json
-
+from loguru import logger
 from langchain.tools import ToolRuntime, tool
 
 from models import AsyncSessionFactory
@@ -44,6 +44,9 @@ async def search_talent_pool(
     current_user_id = runtime.state["current_user_id"]
 
     async with AsyncSessionFactory() as session:
+        logger.info(
+            f"调用人才库检索工具：user_id={current_user_id}, query={query}, top_k={top_k}, position_id={position_id}, status={status}"
+        )
         async with session.begin():
             user = await UserRepo(session).get_by_id(current_user_id)
             if not user:
@@ -62,6 +65,9 @@ async def search_talent_pool(
 
     if not candidates:
         return "没有找到符合条件的候选人。"
+    logger.info(
+        f"人才库检索完成：query={query}, count={len(candidates)}"
+    )
 
     return json.dumps(
         {
