@@ -71,6 +71,7 @@ async def search_talent_pool(
 
     return json.dumps(
         {
+            "artifact_type": "candidate_cards",
             "candidates": candidates,
             "count": len(candidates),
         },

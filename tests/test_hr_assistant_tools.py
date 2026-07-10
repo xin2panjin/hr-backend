@@ -1,8 +1,14 @@
 from agents.hr_assistant.tools.talent_search import _parse_status
 from agents.hr_assistant.tools.candidate_detail import _build_candidate_detail
 from agents.hr_assistant.tools.candidate_compare import _build_candidate_compare_payload
+from routers.hr_assistant_router import (
+    _extract_hr_assistant_artifacts,
+    _get_current_turn_messages,
+)
 from models.candidate import CandidateStatusEnum
 from types import SimpleNamespace
+import json
+
 
 def test_parse_status_by_value():
     assert _parse_status("已投递") == CandidateStatusEnum.APPLICATION
@@ -90,3 +96,118 @@ def test_build_candidate_compare_payload_hides_sensitive_fields():
     assert "email" not in candidate_detail
     assert "phone_number" not in candidate_detail
     assert "birthday" not in candidate_detail
+
+def test_extract_artifacts_from_search_tool_message():
+    message = SimpleNamespace(
+        type="tool",
+        content=json.dumps(
+            {
+                "artifact_type": "candidate_cards",
+                "candidates": [
+                    {
+                        "candidate_id": "candidate-1",
+                        "name": "张三",
+                        "position_title": "后端开发工程师",
+                        "status": "AI筛选通过",
+                        "score": 0.86,
+                        "profile_text": "熟悉 Python 和 Milvus",
+                    }
+                ],
+                "count": 1,
+            },
+            ensure_ascii=False,
+        ),
+    )
+
+    artifacts = _extract_hr_assistant_artifacts([message])
+
+    assert len(artifacts) == 1
+    assert artifacts[0]["type"] == "candidate_cards"
+    assert artifacts[0]["candidates"][0]["candidate_id"] == "candidate-1"
+    assert artifacts[0]["candidates"][0]["actions"][0] == {
+        "type": "open_candidate_detail",
+        "label": "查看详情",
+        "candidate_id": "candidate-1",
+    }
+
+def test_extract_artifacts_from_candidate_detail_tool_message():
+    message = SimpleNamespace(
+        type="tool",
+        content=json.dumps(
+            {
+                "artifact_type": "candidate_detail",
+                "candidate_id": "candidate-1",
+                "name": "张三",
+                "status": "已投递",
+                "position": {
+                    "id": "position-1",
+                    "title": "后端开发工程师",
+                    "department": "技术部",
+                },
+                "ai_score": {
+                    "summary": "后端基础扎实，有 RAG 项目经验",
+                },
+            },
+            ensure_ascii=False,
+        ),
+    )
+
+    artifacts = _extract_hr_assistant_artifacts([message])
+
+    assert len(artifacts) == 1
+    assert artifacts[0]["type"] == "candidate_detail"
+    assert artifacts[0]["candidates"][0]["candidate_id"] == "candidate-1"
+    assert artifacts[0]["candidates"][0]["position_title"] == "后端开发工程师"
+    assert artifacts[0]["candidates"][0]["actions"][0]["type"] == "open_candidate_detail"
+
+def test_extract_artifacts_only_from_current_turn_messages():
+    old_tool_message = SimpleNamespace(
+        type="tool",
+        content=json.dumps(
+            {
+                "artifact_type": "candidate_cards",
+                "candidates": [
+                    {
+                        "candidate_id": "old-candidate",
+                        "name": "旧候选人",
+                        "position_title": "后端开发工程师",
+                    }
+                ],
+                "count": 1,
+            },
+            ensure_ascii=False,
+        ),
+    )
+    current_tool_message = SimpleNamespace(
+        type="tool",
+        content=json.dumps(
+            {
+                "artifact_type": "candidate_cards",
+                "candidates": [
+                    {
+                        "candidate_id": "new-candidate",
+                        "name": "新候选人",
+                        "position_title": "大模型算法工程师",
+                    }
+                ],
+                "count": 1,
+            },
+            ensure_ascii=False,
+        ),
+    )
+
+    messages = [
+        SimpleNamespace(type="human", content="帮我找后端候选人"),
+        old_tool_message,
+        SimpleNamespace(type="ai", content="找到旧候选人"),
+        SimpleNamespace(type="human", content="再帮我找大模型候选人"),
+        current_tool_message,
+        SimpleNamespace(type="ai", content="找到新候选人"),
+    ]
+
+    current_turn_messages = _get_current_turn_messages(messages)
+    artifacts = _extract_hr_assistant_artifacts(current_turn_messages)
+
+    assert len(artifacts) == 1
+    assert artifacts[0]["type"] == "candidate_cards"
+    assert artifacts[0]["candidates"][0]["candidate_id"] == "new-candidate"

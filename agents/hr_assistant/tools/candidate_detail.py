@@ -94,8 +94,11 @@ async def get_candidate_detail(
     if not candidates:
         return "没有找到该候选人，或当前用户无权查看该候选人。"
 
+    detail = _build_candidate_detail(candidates[0])
+    detail["artifact_type"] = "candidate_detail"
+
     return json.dumps(
-        _build_candidate_detail(candidates[0]),
+        detail,
         ensure_ascii=False,
         default=str,
     )
