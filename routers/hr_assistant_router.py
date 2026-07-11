@@ -140,7 +140,28 @@ def _extract_hr_assistant_artifacts(messages: list[Any]) -> list[dict]:
                         "raw": payload,
                     }
                 )
+        # compare_candidates 返回结构：
+        # {"artifact_type": "candidate_comparison", "candidates": [...], ...}
+        if artifact_type == "candidate_comparison":
+            cards = [
+                card
+                for candidate in payload.get("candidates", [])
+                if (card := _build_candidate_card(candidate)) is not None
+            ]
 
+            if cards:
+                artifacts.append(
+                    {
+                        "type": "candidate_comparison",
+                        "title": "候选人对比结果",
+                        "candidates": cards,
+                        # 保留完整详情、AI 评分和未找到的候选人 ID，
+                        # 前端对比表将从这里读取。
+                        "raw": payload,
+                    }
+                )
+
+            continue
     # 同一轮里如果 AI 多次调用 search_talent_pool，只保留最后一次搜索结果
     search_card_indexes = [
         index

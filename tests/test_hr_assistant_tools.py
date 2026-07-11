@@ -211,3 +211,48 @@ def test_extract_artifacts_only_from_current_turn_messages():
     assert len(artifacts) == 1
     assert artifacts[0]["type"] == "candidate_cards"
     assert artifacts[0]["candidates"][0]["candidate_id"] == "new-candidate"
+
+def test_extract_artifacts_from_candidate_comparison_tool_message():
+    """候选人对比工具结果应被转换为前端可渲染的 artifact。"""
+
+    message = SimpleNamespace(
+        type="tool",
+        content=json.dumps(
+            {
+                "artifact_type": "candidate_comparison",
+                "candidates": [
+                    {
+                        "candidate_id": "candidate-1",
+                        "name": "张三",
+                        "status": "AI筛选通过",
+                        "position": {"title": "大模型算法工程师"},
+                        "ai_score": {
+                            "overall_score": 9,
+                            "summary": "RAG 与 Agent 项目经验丰富。",
+                        },
+                    },
+                    {
+                        "candidate_id": "candidate-2",
+                        "name": "李四",
+                        "status": "已投递",
+                        "position": {"title": "后端开发工程师"},
+                        "ai_score": {
+                            "overall_score": 8,
+                            "summary": "后端工程经验扎实。",
+                        },
+                    },
+                ],
+                "count": 2,
+                "missing_candidate_ids": ["candidate-3"],
+            },
+            ensure_ascii=False,
+        ),
+    )
+
+    artifacts = _extract_hr_assistant_artifacts([message])
+
+    assert len(artifacts) == 1
+    assert artifacts[0]["type"] == "candidate_comparison"
+    assert len(artifacts[0]["candidates"]) == 2
+    assert artifacts[0]["candidates"][0]["name"] == "张三"
+    assert artifacts[0]["raw"]["missing_candidate_ids"] == ["candidate-3"]

@@ -34,7 +34,7 @@ class HRAssistantArtifactSchema(BaseModel):
     前端后续可以根据 type 决定渲染成候选人卡片、候选人详情卡片或对比表格。
     """
 
-    type: Literal["candidate_cards", "candidate_detail"]
+    type: Literal["candidate_cards", "candidate_detail", "candidate_comparison"]
     title: str
     candidates: list[HRAssistantCandidateCardSchema] = Field(default_factory=list)
     raw: dict[str, Any] | None = Field(None, description="保留原始工具结果，便于后续扩展")

@@ -22,6 +22,7 @@ def _build_candidate_compare_payload(candidates, requested_candidate_ids: list[s
     found_candidate_ids = {candidate.id for candidate in candidates}
 
     return {
+        "artifact_type": "candidate_comparison",
         "candidates": [
             _build_candidate_detail(candidate)
             for candidate in candidates

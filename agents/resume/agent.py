@@ -1,7 +1,7 @@
 from langchain.agents import create_agent
-from .llms import qwen_llm, deepseek_llm
+from agents.llms import qwen_llm, deepseek_llm
 from langchain.agents.middleware import ModelFallbackMiddleware
-from .resume_prompts import EXTRACT_CANDIDATE_SYSTEM_PROMPT
+from agents.resume.prompts import EXTRACT_CANDIDATE_SYSTEM_PROMPT
 from schemas.agent_schema import AgentCandidateSchema
 
 agent = create_agent(
