@@ -132,8 +132,16 @@ class Settings(BaseSettings):
     EMAIL_BOT_EMAIL: str = Field(..., validation_alias="MAIL_USERNAME")
     EMAIL_BOT_PASSWORD: str = Field(..., validation_alias="MAIL_PASSWORD")
 
-    # 阿里云百炼平台的API_KEY
+    # 阿里云百炼平台的 API_KEY
     DASHSCOPE_API_KEY: str = Field(..., validation_alias="DASHSCOPE_API_KEY")
+
+    # 大模型配置：模型会持续迭代，放到 .env 中便于升级，不需要每次修改业务代码
+    LLM_BASE_URL: str = Field(
+        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        validation_alias="LLM_BASE_URL",
+    )
+    QWEN_MODEL: str = Field("qwen3.7-plus", validation_alias="QWEN_MODEL")
+    DEEPSEEK_MODEL: str = Field("deepseek-v4-flash", validation_alias="DEEPSEEK_MODEL")
 
 
     # 钉钉相关的配置
