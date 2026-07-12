@@ -65,8 +65,8 @@ def build_score(overall_score: int) -> AgentCandidateScoreSchema:
 @pytest.mark.parametrize(
     ("overall_score", "expected_status"),
     [
-        (9, CandidateStatusEnum.AI_FILTER_PASSED),
-        (8, CandidateStatusEnum.AI_FILTER_REJECTED),
+        (7, CandidateStatusEnum.AI_FILTER_PASSED),
+        (6, CandidateStatusEnum.AI_FILTER_REJECTED),
     ],
 )
 async def test_save_score_persists_score_and_status(

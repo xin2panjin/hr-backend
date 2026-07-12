@@ -9,6 +9,7 @@ from models.user import UserStatus
 from schemas.candidate_schema import CandidateSchema
 from schemas.position_schema import PositionSchema
 from schemas.user_schema import UserSchema
+from agents.candidate.state import CandidateEventType
 from services import candidate_workflow_service as workflow_module
 from services.candidate_workflow_service import CandidateWorkflowService
 
@@ -18,10 +19,8 @@ class FakeCandidateProcessAgent:
 
     calls = []
 
-    def __init__(self, candidate=None, position=None, interviewer=None):
-        self.candidate = candidate
-        self.position = position
-        self.interviewer = interviewer
+    def __init__(self):
+        pass
 
     async def __aenter__(self):
         return self
@@ -29,13 +28,10 @@ class FakeCandidateProcessAgent:
     async def __aexit__(self, exc_type, exc, tb):
         return None
 
-    async def ainvoke(self, messages, thread_id):
+    async def ainvoke(self, state, thread_id):
         self.calls.append(
             {
-                "candidate_id": self.candidate.id,
-                "position_id": self.position.id,
-                "interviewer_id": self.interviewer.id,
-                "messages": messages,
+                "state": state,
                 "thread_id": thread_id,
             }
         )
@@ -173,6 +169,14 @@ async def test_run_candidate_agent_uses_stable_candidate_process_thread_id(monke
     assert FakeCandidateProcessAgent.calls[0]["thread_id"] == (
         "candidate-process:candidate-1:position-1"
     )
+    state = FakeCandidateProcessAgent.calls[0]["state"]
+    assert state["candidate_id"] == "candidate-1"
+    assert state["position_id"] == "position-1"
+    assert state["interviewer_id"] == "interviewer-1"
+    assert state["event_type"] == CandidateEventType.CANDIDATE_CREATED
+    assert "candidate" not in state
+    assert "position" not in state
+    assert "interviewer" not in state
 
 
 @pytest.mark.asyncio
@@ -194,9 +198,45 @@ async def test_on_candidate_created_loads_context_and_invokes_agent(monkeypatch)
     result = await CandidateWorkflowService().on_candidate_created("candidate-1")
 
     assert result == {"thread_id": "candidate-process:candidate-1:position-1"}
-    assert FakeCandidateProcessAgent.calls[0]["candidate_id"] == "candidate-1"
-    assert FakeCandidateProcessAgent.calls[0]["position_id"] == "position-1"
-    assert FakeCandidateProcessAgent.calls[0]["interviewer_id"] == "interviewer-1"
+    state = FakeCandidateProcessAgent.calls[0]["state"]
+    assert state["candidate_id"] == "candidate-1"
+    assert state["position_id"] == "position-1"
+    assert state["interviewer_id"] == "interviewer-1"
+    assert state["event_type"] == CandidateEventType.CANDIDATE_CREATED
+    assert "候选人信息" not in state["messages"][0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_on_candidate_email_received_uses_email_event_type(monkeypatch):
+    FakeCandidateRepo.candidate = build_candidate_model()
+    FakeCandidateProcessAgent.calls = []
+    monkeypatch.setattr(
+        workflow_module,
+        "AsyncSessionFactory",
+        lambda: FakeSessionFactory(),
+    )
+    monkeypatch.setattr(workflow_module, "CandidateRepo", FakeCandidateRepo)
+    monkeypatch.setattr(
+        workflow_module,
+        "CandidateProcessAgent",
+        FakeCandidateProcessAgent,
+    )
+
+    result = await CandidateWorkflowService().on_candidate_email_received(
+        from_email="Candidate@Example.com",
+        content="我周二上午 10 点可以参加面试",
+    )
+
+    assert result == {"thread_id": "candidate-process:candidate-1:position-1"}
+    state = FakeCandidateProcessAgent.calls[0]["state"]
+    assert state["candidate_id"] == "candidate-1"
+    assert state["position_id"] == "position-1"
+    assert state["interviewer_id"] == "interviewer-1"
+    assert state["event_type"] == CandidateEventType.CANDIDATE_EMAIL_RECEIVED
+    assert "我周二上午 10 点可以参加面试" in state["messages"][0]["content"]
+    assert "candidate" not in state
+    assert "position" not in state
+    assert "interviewer" not in state
 
 
 @pytest.mark.asyncio

@@ -13,9 +13,9 @@ class CandidateScoringService:
         score: AgentCandidateScoreSchema,
     ) -> CandidateStatusEnum:
         """在同一事务中写入评分，并将综合分转换为候选人状态。"""
-        # 业务规则保持与招聘 Prompt 一致：只有综合分严格大于8分才通过。
+        # 业务规则保持与招聘 Prompt/Graph 一致：综合分严格大于 6 分才通过。
         status = CandidateStatusEnum.AI_FILTER_REJECTED
-        if score.overall_score > 8:
+        if score.overall_score > 6:
             status = CandidateStatusEnum.AI_FILTER_PASSED
 
         # 评分和候选人状态必须一起提交，避免出现评分已保存但状态未更新。

@@ -1,6 +1,7 @@
 from schemas.candidate_schema import CandidateSchema
 from schemas.position_schema import PositionSchema
 from schemas.user_schema import UserSchema
+from agents.candidate.state import CandidateEventType
 from services.candidate_workflow_service import CandidateWorkflowService
 
 
@@ -19,12 +20,15 @@ async def run_candidate_agent(
         candidate=candidate,
         position=position,
         interviewer=interviewer,
+        event_type=CandidateEventType.CANDIDATE_CREATED,
         messages=[
             {
                 "role": "user",
                 "content": (
-                    f"候选人信息：{candidate.model_dump_json()}，"
-                    f"职位信息：{position.model_dump_json()}"
+                    "候选人创建事件："
+                    f"candidate_id={candidate.id}，"
+                    f"position_id={position.id}，"
+                    f"interviewer_id={interviewer.id}"
                 ),
             }
         ],

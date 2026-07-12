@@ -4,6 +4,7 @@ from langchain.tools import ToolRuntime, tool
 
 from services.interview_scheduling_service import InterviewSchedulingService
 
+from ..nodes.context import get_state_value, load_candidate_runtime_context
 from ..state import CandidateAgentState
 
 
@@ -12,8 +13,9 @@ async def get_interviewer_available_slot(
     runtime: ToolRuntime[CandidateAgentState],
 ) -> str:
     """查询面试官未来七天内可用于面试的一小时时段。"""
+    context = await load_candidate_runtime_context(runtime.state)
     return await InterviewSchedulingService().get_available_slots(
-        runtime.state["interviewer"]
+        context.interviewer
     )
 
 
@@ -23,9 +25,10 @@ async def send_interview_email(
     runtime: ToolRuntime[CandidateAgentState],
 ) -> str:
     """向候选人发送包含初步面试时间的邀请邮件。"""
+    context = await load_candidate_runtime_context(runtime.state)
     return await InterviewSchedulingService().send_invitation(
-        candidate=runtime.state["candidate"],
-        position=runtime.state["position"],
+        candidate=context.candidate,
+        position=context.position,
         interview_datetime_str=interview_datetime_str,
     )
 
@@ -36,10 +39,11 @@ async def confirm_interview_time(
     runtime: ToolRuntime[CandidateAgentState],
 ) -> str:
     """确认面试时间，并同步邮件、钉钉日程和系统面试记录。"""
+    context = await load_candidate_runtime_context(runtime.state)
     return await InterviewSchedulingService().confirm_interview(
-        candidate=runtime.state["candidate"],
-        position=runtime.state["position"],
-        interviewer=runtime.state["interviewer"],
+        candidate=context.candidate,
+        position=context.position,
+        interviewer=context.interviewer,
         interview_datetime_str=interview_datetime_str,
     )
 
@@ -47,8 +51,11 @@ async def confirm_interview_time(
 @tool
 async def refuse_interview(runtime: ToolRuntime[CandidateAgentState]) -> str:
     """将候选人状态更新为拒绝面试。"""
+    candidate_id = get_state_value(runtime.state, "candidate_id")
+    if not candidate_id:
+        return "拒绝面试失败：候选人流程缺少 candidate_id"
     return await InterviewSchedulingService().mark_refused(
-        runtime.state["candidate"].id
+        candidate_id
     )
 
 

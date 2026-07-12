@@ -3,6 +3,7 @@ from typing import Sequence
 from langchain_core.messages import BaseMessage
 
 from agents.candidate.agent import CandidateProcessAgent
+from agents.candidate.state import CandidateEventType
 from models import AsyncSessionFactory
 from repository.candidate_repo import CandidateRepo
 from schemas.candidate_schema import CandidateSchema
@@ -31,12 +32,15 @@ class CandidateWorkflowService:
             candidate=candidate,
             position=position,
             interviewer=interviewer,
+            event_type=CandidateEventType.CANDIDATE_CREATED,
             messages=[
                 {
                     "role": "user",
                     "content": (
-                        f"候选人信息：{candidate.model_dump_json()}，"
-                        f"职位信息：{position.model_dump_json()}"
+                        "候选人创建事件："
+                        f"candidate_id={candidate.id}，"
+                        f"position_id={position.id}，"
+                        f"interviewer_id={interviewer.id}"
                     ),
                 }
             ],
@@ -51,6 +55,7 @@ class CandidateWorkflowService:
             candidate=candidate,
             position=position,
             interviewer=interviewer,
+            event_type=CandidateEventType.CANDIDATE_EMAIL_RECEIVED,
             messages=[
                 {
                     "role": "user",
@@ -65,17 +70,21 @@ class CandidateWorkflowService:
         candidate: CandidateSchema,
         position: PositionSchema,
         interviewer: UserSchema,
+        event_type: CandidateEventType = CandidateEventType.CANDIDATE_CREATED,
         messages: Sequence[BaseMessage | dict],
     ):
-        """以统一 thread_id 调用候选人 Agent，供不同入口复用。"""
+        """以统一 thread_id 和轻量 State 调用候选人 Agent，供不同入口复用。"""
         thread_id = self.build_thread_id(candidate.id, position.id)
-        async with CandidateProcessAgent(
-            candidate=candidate,
-            position=position,
-            interviewer=interviewer,
-        ) as agent:
+        state = {
+            "messages": list(messages),
+            "candidate_id": candidate.id,
+            "position_id": position.id,
+            "interviewer_id": interviewer.id,
+            "event_type": event_type,
+        }
+        async with CandidateProcessAgent() as agent:
             return await agent.ainvoke(
-                messages=list(messages),
+                state=state,
                 thread_id=thread_id,
             )
 
