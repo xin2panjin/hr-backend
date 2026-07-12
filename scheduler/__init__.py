@@ -4,10 +4,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from core.email_bot import EmailBot
 from core.email_bot.settings import EmailBotSettings
 from loguru import logger
-from agents.candidate.agent import CandidateProcessAgent
-from langchain.messages import HumanMessage
 from settings import settings
 from core.cache import HRCache
+from services.candidate_workflow_service import CandidateWorkflowService
 
 scheduler = AsyncIOScheduler()
 
@@ -26,23 +25,24 @@ async def poll_and_process_emails(bot: EmailBot, state: dict):
 
         new_emails.sort(key=lambda e: int(e.uid))
 
-        async with CandidateProcessAgent() as agent:
-            for mail in new_emails:
-                if mail.from_.address.lower() == bot.settings.email.lower():
-                    continue
+        workflow_service = CandidateWorkflowService()
+        for mail in new_emails:
+            if mail.from_.address.lower() == bot.settings.email.lower():
+                continue
 
-                thread_id = mail.from_.address
-                response = await agent.ainvoke(
-                    messages=[HumanMessage(content=f"收到邮件内容：{mail.text or mail.html}")],
-                    thread_id=thread_id
-                )
-                logger.info(f"Processed email from {thread_id}, response: {response}")
+            response = await workflow_service.on_candidate_email_received(
+                from_email=mail.from_.address,
+                content=mail.text or mail.html or "",
+            )
+            logger.info(
+                f"Processed email from {mail.from_.address}, response: {response}"
+            )
 
-                state["last_uid"] = max(state["last_uid"], int(mail.uid))
-                cache = HRCache()
-                await cache.set_email_last_uid(state["last_uid"])
+            state["last_uid"] = max(state["last_uid"], int(mail.uid))
+            cache = HRCache()
+            await cache.set_email_last_uid(state["last_uid"])
 
-            logger.info(f"Processed {len(new_emails)} new emails, last_uid now {state['last_uid']}")
+        logger.info(f"Processed {len(new_emails)} new emails, last_uid now {state['last_uid']}")
 
     except Exception as e:
         logger.exception(f"Failed to poll and process emails: {e}")

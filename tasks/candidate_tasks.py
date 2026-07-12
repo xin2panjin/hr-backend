@@ -1,27 +1,12 @@
-from agents.candidate.agent import CandidateProcessAgent
-from models import AsyncSessionFactory
-from repository.candidate_repo import CandidateRepo
 from schemas.candidate_schema import CandidateSchema
 from schemas.position_schema import PositionSchema
 from schemas.user_schema import UserSchema
+from services.candidate_workflow_service import CandidateWorkflowService
 
 
 async def run_candidate_agent_by_id(candidate_id: str):
-    async with AsyncSessionFactory() as session:
-        async with session.begin():
-            candidate_model = await CandidateRepo(session).get_by_id(candidate_id)
-            if not candidate_model:
-                raise ValueError(f"候选人不存在：{candidate_id}")
-
-            candidate = CandidateSchema.model_validate(candidate_model)
-            position = PositionSchema.model_validate(candidate_model.position)
-            interviewer = UserSchema.model_validate(candidate_model.position.creator)
-
-    return await run_candidate_agent(
-        candidate=candidate,
-        position=position,
-        interviewer=interviewer,
-    )
+    """BackgroundTask 入口：候选人创建后交给工作流服务处理。"""
+    return await CandidateWorkflowService().on_candidate_created(candidate_id)
 
 
 async def run_candidate_agent(
@@ -29,19 +14,20 @@ async def run_candidate_agent(
     position: PositionSchema,
     interviewer: UserSchema,
 ):
-    async with CandidateProcessAgent(
+    """兼容旧调用方：直接传入上下文时仍通过统一工作流服务调用 Agent。"""
+    response = await CandidateWorkflowService().run_candidate_agent(
         candidate=candidate,
         position=position,
         interviewer=interviewer,
-    ) as agent:
-        response = await agent.ainvoke(
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"候选人信息：{candidate.model_dump_json()}，职位信息：{position.model_dump_json()}",
-                }
-            ],
-            thread_id=candidate.email,
-        )
-        print(response)
-        return response
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"候选人信息：{candidate.model_dump_json()}，"
+                    f"职位信息：{position.model_dump_json()}"
+                ),
+            }
+        ],
+    )
+    print(response)
+    return response

@@ -9,7 +9,6 @@ from core.dingtalk import DingTalkHttp
 from core.email_bot import EmailBot, EmailBotSettings
 from models import AsyncSessionFactory
 from models.candidate import CandidateStatusEnum
-from models.interview import InterviewResultEnum
 from repository.candidate_repo import CandidateRepo
 from repository.interview_repo import InterviewRepo
 from repository.user_repo import UserRepo
@@ -125,6 +124,24 @@ class InterviewSchedulingService:
         except Exception as exc:
             return f"{interview_datetime_str}格式化失败！{exc}"
 
+        interview_datetime_naive = interview_datetime.replace(tzinfo=None)
+
+        # 幂等保护：同一候选人同一时间已经确认过时，不再重复发确认邮件或创建钉钉日程。
+        # 这能避免 Agent 重试同一个 confirm_interview_time 工具调用时产生重复副作用。
+        try:
+            async with AsyncSessionFactory() as session:
+                async with session.begin():
+                    existing_interview = await InterviewRepo(session).get_by_candidate_id(
+                        candidate.id
+                    )
+                    if (
+                        existing_interview
+                        and existing_interview.scheduled_time == interview_datetime_naive
+                    ):
+                        return "该候选人的面试时间已确认，无需重复发送确认邮件或创建日程。"
+        except Exception as exc:
+            return f"检查候选人面试记录失败！{exc}"
+
         # 先通知候选人，再创建面试官日程；任一步失败都会返回明确结果给 Agent。
         try:
             await self._send_email(
@@ -160,8 +177,7 @@ class InterviewSchedulingService:
                 async with session.begin():
                     await InterviewRepo(session).create_interview(
                         {
-                            "scheduled_time": interview_datetime.replace(tzinfo=None),
-                            "result": InterviewResultEnum.PENDING,
+                            "scheduled_time": interview_datetime_naive,
                             "candidate_id": candidate.id,
                             "interviewer_id": interviewer.id,
                         }

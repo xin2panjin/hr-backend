@@ -46,6 +46,22 @@ class CandidateRepo(BaseRepo):
             )
         )
 
+    async def get_latest_by_email(self, email: str) -> CandidateModel | None:
+        """按候选人邮箱查询最近一次投递记录，并预加载 Agent 流程需要的上下文。"""
+        return await self.session.scalar(
+            select(CandidateModel)
+            .where(func.lower(CandidateModel.email) == email.strip().lower())
+            .options(
+                selectinload(CandidateModel.position).selectinload(PositionModel.creator),
+                selectinload(CandidateModel.position).selectinload(PositionModel.department),
+                selectinload(CandidateModel.resume).selectinload(ResumeModel.uploader),
+                selectinload(CandidateModel.creator),
+                selectinload(CandidateModel.ai_score),
+            )
+            .order_by(CandidateModel.created_at.desc())
+            .limit(1)
+        )
+
     async def get_list(
         self,
         current_user: UserModel,

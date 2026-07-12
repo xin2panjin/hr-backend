@@ -121,7 +121,7 @@ class Settings(BaseSettings):
     MAIL_FROM: str = Field(..., validation_alias="MAIL_USERNAME")
     MAIL_PORT: int = 587
     MAIL_SERVER: str = "smtp.qq.com"
-    MAIL_FROM_NAME: str = "知了课堂"
+    MAIL_FROM_NAME: str = "X公司HR部门"
     MAIL_STARTTLS: bool = True
     MAIL_SSL_TLS: bool = False
     ENABLE_EMAIL_POLLING: bool = Field(False, validation_alias="ENABLE_EMAIL_POLLING")
@@ -163,7 +163,7 @@ class Settings(BaseSettings):
     )
 
     # 前端和后端的域名
-    BACKEND_BASE_URL: str = Field("https://shaina-changeless-danika.ngrok-free.dev", validation_alias="BACKEND_BASE_URL")
+    BACKEND_BASE_URL: str = Field("https://spearfish-varying-stalemate.ngrok-free.dev/", validation_alias="BACKEND_BASE_URL")
 
     # 简历上传存储路径
     RESUME_DIR: str = os.path.join(BASE_DIR, "upload")
