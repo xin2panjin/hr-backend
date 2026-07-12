@@ -103,7 +103,7 @@ class InterviewSchedulingService:
         try:
             await self._send_email(
                 to=candidate.email,
-                subject="【知了课堂】面试邀请-协商面试时间",
+                subject="X公司 面试邀请-协商面试时间",
                 body=body,
             )
             return f"给候选人发送面试邀请邮件成功！面试时间初步确定为：{interview_datetime_str}"
@@ -146,7 +146,7 @@ class InterviewSchedulingService:
         try:
             await self._send_email(
                 to=candidate.email,
-                subject="【知了课堂】面试时间确定",
+                subject="X公司 面试时间确定",
                 body=(
                     f"尊敬的{candidate.name}，\n"
                     f"面试时间已确定：{interview_datetime_str}\n"

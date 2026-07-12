@@ -1,11 +1,26 @@
 import pytest
 
 from agents.candidate import graph as graph_module
+from agents.candidate.nodes import logging as graph_logging_module
 from agents.candidate.state import (
     CandidateEventType,
     CandidateProcessStage,
     CandidateReplyIntent,
 )
+
+
+@pytest.fixture(autouse=True)
+def disable_candidate_graph_event_db_write(monkeypatch):
+    """Graph 行为测试只验证路由，不真实写业务审计表。"""
+
+    async def fake_record_graph_event(event_data):
+        return None
+
+    monkeypatch.setattr(
+        graph_logging_module,
+        "record_graph_event",
+        fake_record_graph_event,
+    )
 
 
 def build_base_state(event_type: CandidateEventType) -> dict:

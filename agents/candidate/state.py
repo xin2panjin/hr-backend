@@ -52,6 +52,7 @@ class CandidateAgentState(BaseModel):
 
     messages: Annotated[list[BaseMessage], add_messages] = Field(default_factory=list)
 
+    thread_id: Annotated[str | None, keep_previous_value] = None
     candidate_id: Annotated[str | None, keep_previous_value] = None
     position_id: Annotated[str | None, keep_previous_value] = None
     interviewer_id: Annotated[str | None, keep_previous_value] = None

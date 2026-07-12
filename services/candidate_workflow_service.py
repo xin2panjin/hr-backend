@@ -77,6 +77,7 @@ class CandidateWorkflowService:
         thread_id = self.build_thread_id(candidate.id, position.id)
         state = {
             "messages": list(messages),
+            "thread_id": thread_id,
             "candidate_id": candidate.id,
             "position_id": position.id,
             "interviewer_id": interviewer.id,

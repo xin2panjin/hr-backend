@@ -170,6 +170,7 @@ async def test_run_candidate_agent_uses_stable_candidate_process_thread_id(monke
         "candidate-process:candidate-1:position-1"
     )
     state = FakeCandidateProcessAgent.calls[0]["state"]
+    assert state["thread_id"] == "candidate-process:candidate-1:position-1"
     assert state["candidate_id"] == "candidate-1"
     assert state["position_id"] == "position-1"
     assert state["interviewer_id"] == "interviewer-1"
@@ -199,6 +200,7 @@ async def test_on_candidate_created_loads_context_and_invokes_agent(monkeypatch)
 
     assert result == {"thread_id": "candidate-process:candidate-1:position-1"}
     state = FakeCandidateProcessAgent.calls[0]["state"]
+    assert state["thread_id"] == "candidate-process:candidate-1:position-1"
     assert state["candidate_id"] == "candidate-1"
     assert state["position_id"] == "position-1"
     assert state["interviewer_id"] == "interviewer-1"
@@ -229,6 +231,7 @@ async def test_on_candidate_email_received_uses_email_event_type(monkeypatch):
 
     assert result == {"thread_id": "candidate-process:candidate-1:position-1"}
     state = FakeCandidateProcessAgent.calls[0]["state"]
+    assert state["thread_id"] == "candidate-process:candidate-1:position-1"
     assert state["candidate_id"] == "candidate-1"
     assert state["position_id"] == "position-1"
     assert state["interviewer_id"] == "interviewer-1"
