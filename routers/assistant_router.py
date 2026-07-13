@@ -1,6 +1,10 @@
 """HR 招聘助手的会话管理接口。"""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import json
+from collections.abc import AsyncIterator
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 
 from dependencies import get_hr_assistant_user
 from models.assistant_conversation import AssistantConversationStatusEnum
@@ -59,6 +63,12 @@ def _raise_service_error(exc: Exception) -> None:
     if isinstance(exc, AssistantConversationInactiveError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     raise exc
+
+
+def _format_sse(event: str, data: dict) -> str:
+    """序列化标准 SSE 事件，确保中文内容不被转义。"""
+
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 @router.post("/conversations", response_model=CreateAssistantConversationRespSchema, summary="创建招聘助手会话")
@@ -129,6 +139,49 @@ async def send_conversation_message(
         )
     except (AssistantConversationNotFoundError, AssistantConversationInactiveError) as exc:
         _raise_service_error(exc)
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages/stream",
+    summary="流式发送招聘助手消息",
+    response_class=StreamingResponse,
+)
+async def stream_conversation_message(
+    conversation_id: str,
+    data: SendAssistantMessageReqSchema,
+    request: Request,
+    current_user: UserModel = Depends(get_hr_assistant_user),
+):
+    """输出模型文本和工具过程；最终回答仍由 Service 统一持久化。"""
+
+    service = HRAssistantConversationService()
+    try:
+        # StreamingResponse 一旦开始写入就无法再返回 HTTP 404/409，因此预校验。
+        await service.ensure_active_conversation(
+            user_id=current_user.id,
+            conversation_id=conversation_id,
+        )
+    except (AssistantConversationNotFoundError, AssistantConversationInactiveError) as exc:
+        _raise_service_error(exc)
+
+    async def event_source() -> AsyncIterator[str]:
+        async for event in service.stream_message(
+            user_id=current_user.id,
+            conversation_id=conversation_id,
+            content=data.content.strip(),
+        ):
+            if await request.is_disconnected():
+                return
+            yield _format_sse(event["event"], event["data"])
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.patch(

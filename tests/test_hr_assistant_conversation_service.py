@@ -8,6 +8,7 @@ import pytest
 from models.assistant_conversation import AssistantConversationStatusEnum
 from services import hr_assistant_conversation_service as conversation_module
 from services.hr_assistant_conversation_service import (
+    AssistantConversationInactiveError,
     AssistantConversationNotFoundError,
     HRAssistantConversationService,
 )
@@ -98,6 +99,61 @@ class FakeHRAssistantAgent:
             ]
         }
 
+    async def astream(self, *, messages, thread_id):
+        """模拟 LangGraph 的 messages/updates 双流模式。"""
+
+        type(self).received_thread_id = thread_id
+        yield (
+            "updates",
+            {
+                "model": {
+                    "messages": [
+                        SimpleNamespace(
+                            type="ai",
+                            tool_calls=[{"id": "call-1", "name": "search_talent_pool"}],
+                        )
+                    ]
+                }
+            },
+        )
+        yield (
+            "messages",
+            (SimpleNamespace(type="AIMessageChunk", content="找到", tool_call_chunks=[]), {}),
+        )
+        yield (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        SimpleNamespace(
+                            type="tool",
+                            name="search_talent_pool",
+                            tool_call_id="call-1",
+                        )
+                    ]
+                }
+            },
+        )
+        yield (
+            "messages",
+            (SimpleNamespace(type="AIMessageChunk", content="一位候选人。", tool_call_chunks=[]), {}),
+        )
+
+    async def get_state_values(self, thread_id):
+        return await self.ainvoke(
+            messages=[{"role": "user", "content": "找 Python 候选人"}],
+            thread_id=thread_id,
+        )
+
+
+class FailingHRAssistantAgent(FakeHRAssistantAgent):
+    """模拟模型流执行失败。"""
+
+    async def astream(self, *, messages, thread_id):
+        if False:
+            yield None
+        raise RuntimeError("模拟模型连接失败")
+
 
 @pytest.mark.asyncio
 async def test_send_message_persists_user_answer_and_tool_summary(monkeypatch):
@@ -142,6 +198,83 @@ async def test_send_message_hides_other_users_conversation(monkeypatch):
             conversation_id="conversation-1",
             content="越权访问",
         )
+
+
+@pytest.mark.asyncio
+async def test_ensure_active_conversation_rejects_archived_conversation(monkeypatch):
+    """SSE 路由预校验必须在模型调用前拒绝已归档会话。"""
+
+    monkeypatch.setattr(conversation_module, "AsyncSessionFactory", lambda: FakeSessionFactory())
+    monkeypatch.setattr(conversation_module, "AssistantConversationRepo", FakeConversationRepo)
+    original_status = FakeConversationRepo.conversation.status
+    FakeConversationRepo.conversation.status = AssistantConversationStatusEnum.ARCHIVED
+    try:
+        with pytest.raises(AssistantConversationInactiveError):
+            await HRAssistantConversationService().ensure_active_conversation(
+                user_id="hr-1",
+                conversation_id="conversation-1",
+            )
+    finally:
+        FakeConversationRepo.conversation.status = original_status
+
+
+@pytest.mark.asyncio
+async def test_stream_message_emits_text_tool_events_and_persists_final_turn(monkeypatch):
+    """SSE 服务应输出过程事件，且只在结束后持久化最终助手消息。"""
+
+    FakeConversationRepo.created_messages = []
+    monkeypatch.setattr(conversation_module, "AsyncSessionFactory", lambda: FakeSessionFactory())
+    monkeypatch.setattr(conversation_module, "AssistantConversationRepo", FakeConversationRepo)
+    monkeypatch.setattr(conversation_module, "HRAssistantAgent", FakeHRAssistantAgent)
+
+    events = [
+        event
+        async for event in HRAssistantConversationService().stream_message(
+            user_id="hr-1",
+            conversation_id="conversation-1",
+            content="找 Python 候选人",
+        )
+    ]
+
+    assert [event["event"] for event in events] == [
+        "message_start",
+        "tool_start",
+        "content_delta",
+        "tool_end",
+        "content_delta",
+        "message_end",
+    ]
+    assert events[1]["data"]["display"] == "正在检索人才库"
+    assert events[-1]["data"]["answer"] == "找到一位候选人。"
+    assert events[-1]["data"]["candidate_ids"] == ["candidate-1"]
+    assert [item["role"].value for item in FakeConversationRepo.created_messages] == [
+        "user",
+        "assistant",
+        "tool",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_stream_message_returns_error_without_persisting_success_message(monkeypatch):
+    """模型流失败后只保留用户消息，不能写入伪造的助手成功记录。"""
+
+    FakeConversationRepo.created_messages = []
+    monkeypatch.setattr(conversation_module, "AsyncSessionFactory", lambda: FakeSessionFactory())
+    monkeypatch.setattr(conversation_module, "AssistantConversationRepo", FakeConversationRepo)
+    monkeypatch.setattr(conversation_module, "HRAssistantAgent", FailingHRAssistantAgent)
+
+    events = [
+        event
+        async for event in HRAssistantConversationService().stream_message(
+            user_id="hr-1",
+            conversation_id="conversation-1",
+            content="找 Python 候选人",
+        )
+    ]
+
+    assert [event["event"] for event in events] == ["message_start", "error"]
+    assert events[-1]["data"]["code"] == "assistant_stream_failed"
+    assert [item["role"].value for item in FakeConversationRepo.created_messages] == ["user"]
 
 
 def test_build_thread_id_contains_user_and_conversation():

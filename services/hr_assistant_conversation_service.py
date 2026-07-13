@@ -1,7 +1,9 @@
 """HR 招聘助手会话应用服务。"""
 
 import json
-from typing import Any
+from typing import Any, AsyncIterator
+
+from loguru import logger
 
 from agents.hr_assistant.agent import HRAssistantAgent
 from models import AsyncSessionFactory
@@ -113,7 +115,38 @@ class HRAssistantConversationService:
     ) -> dict:
         """持久化一轮对话，并返回当前轮的最终回答和前端产物。"""
 
-        # 第一段短事务：先确认所有权并保存用户消息。模型调用不持有事务。
+        await self._persist_user_message(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            content=content,
+        )
+
+        async with HRAssistantAgent(current_user_id=user_id) as agent:
+            response = await agent.ainvoke(
+                messages=[{"role": "user", "content": content}],
+                thread_id=self.build_thread_id(user_id, conversation_id),
+            )
+
+        assistant_message, answer, artifacts, _ = await self._persist_assistant_turn(
+            conversation_id=conversation_id,
+            response=response,
+        )
+
+        return {
+            "conversation_id": conversation_id,
+            "message_id": assistant_message.id,
+            "answer": answer,
+            "artifacts": artifacts,
+        }
+
+    async def ensure_active_conversation(
+        self,
+        *,
+        user_id: str,
+        conversation_id: str,
+    ) -> None:
+        """在开始 SSE 响应前校验会话，确保能返回正确的 HTTP 状态码。"""
+
         async with AsyncSessionFactory() as session:
             async with session.begin():
                 repo = AssistantConversationRepo(session)
@@ -124,7 +157,105 @@ class HRAssistantConversationService:
                 )
                 if conversation.status != AssistantConversationStatusEnum.ACTIVE:
                     raise AssistantConversationInactiveError("当前会话已归档或删除")
-                await repo.create_message(
+
+    async def stream_message(
+        self,
+        *,
+        user_id: str,
+        conversation_id: str,
+        content: str,
+    ) -> AsyncIterator[dict]:
+        """流式执行一轮对话，并输出稳定、脱敏的应用层事件。
+
+        临时 token 只输出给客户端；只有 Graph 成功结束后才写入最终助手
+        消息和工具审计摘要，避免断流时产生伪造的成功记录。
+        """
+
+        thread_id = self.build_thread_id(user_id, conversation_id)
+        started_tool_call_ids: set[str] = set()
+        completed_tool_call_ids: set[str] = set()
+
+        try:
+            user_message = await self._persist_user_message(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                content=content,
+            )
+            yield {
+                "event": "message_start",
+                "data": {
+                    "conversation_id": conversation_id,
+                    "user_message_id": user_message.id,
+                },
+            }
+
+            async with HRAssistantAgent(current_user_id=user_id) as agent:
+                async for event in agent.astream(
+                    messages=[{"role": "user", "content": content}],
+                    thread_id=thread_id,
+                ):
+                    mode, payload = self._split_stream_event(event)
+                    if mode == "messages":
+                        for item in self._extract_text_stream_events(payload):
+                            yield item
+                    elif mode == "updates":
+                        for item in self._extract_tool_stream_events(
+                            payload=payload,
+                            started_tool_call_ids=started_tool_call_ids,
+                            completed_tool_call_ids=completed_tool_call_ids,
+                        ):
+                            yield item
+
+                response = await agent.get_state_values(thread_id)
+
+            assistant_message, answer, artifacts, candidate_ids = await self._persist_assistant_turn(
+                conversation_id=conversation_id,
+                response=response,
+            )
+            yield {
+                "event": "message_end",
+                "data": {
+                    "message_id": assistant_message.id,
+                    "answer": answer,
+                    "artifacts": artifacts,
+                    "candidate_ids": candidate_ids,
+                },
+            }
+        except Exception as exc:
+            # 不将模型/数据库堆栈或用户输入暴露给客户端；详细异常仅记录服务端日志。
+            logger.exception(
+                "HR助手 SSE 执行失败 conversation_id={} error_type={}",
+                conversation_id,
+                type(exc).__name__,
+            )
+            yield {
+                "event": "error",
+                "data": {
+                    "code": "assistant_stream_failed",
+                    "message": "招聘助手暂时无法完成本次请求，请稍后重试。",
+                },
+            }
+
+    async def _persist_user_message(
+        self,
+        *,
+        user_id: str,
+        conversation_id: str,
+        content: str,
+    ):
+        """短事务写入用户消息；同步和 SSE 两条链路共用。"""
+
+        async with AsyncSessionFactory() as session:
+            async with session.begin():
+                repo = AssistantConversationRepo(session)
+                conversation = await self._get_owned_conversation_or_raise(
+                    repo=repo,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                )
+                if conversation.status != AssistantConversationStatusEnum.ACTIVE:
+                    raise AssistantConversationInactiveError("当前会话已归档或删除")
+                user_message = await repo.create_message(
                     conversation_id=conversation_id,
                     role=AssistantMessageRoleEnum.USER,
                     content=content,
@@ -133,12 +264,15 @@ class HRAssistantConversationService:
                     conversation_id=conversation_id,
                     touch_last_message_at=True,
                 )
+                return user_message
 
-        async with HRAssistantAgent(current_user_id=user_id) as agent:
-            response = await agent.ainvoke(
-                messages=[{"role": "user", "content": content}],
-                thread_id=self.build_thread_id(user_id, conversation_id),
-            )
+    async def _persist_assistant_turn(
+        self,
+        *,
+        conversation_id: str,
+        response: dict,
+    ):
+        """短事务写入最终回答、产物和工具审计摘要。"""
 
         messages = response.get("messages", [])
         current_turn_messages = self._get_current_turn_messages(messages)
@@ -147,7 +281,6 @@ class HRAssistantConversationService:
         tool_summaries = self._extract_tool_summaries(current_turn_messages)
         candidate_ids = self._collect_candidate_ids(artifacts, tool_summaries)
 
-        # 第二段短事务：落库最终回答和经过脱敏处理的工具审计摘要。
         async with AsyncSessionFactory() as session:
             async with session.begin():
                 repo = AssistantConversationRepo(session)
@@ -174,12 +307,99 @@ class HRAssistantConversationService:
                     touch_last_message_at=True,
                 )
 
-        return {
-            "conversation_id": conversation_id,
-            "message_id": assistant_message.id,
-            "answer": answer,
-            "artifacts": artifacts,
+        return assistant_message, answer, artifacts, candidate_ids
+
+    @staticmethod
+    def _split_stream_event(event: Any) -> tuple[str | None, Any]:
+        """兼容 LangGraph 多 stream_mode 返回的 ``(mode, data)`` 格式。"""
+
+        if isinstance(event, tuple) and len(event) == 2:
+            return event[0], event[1]
+        return None, event
+
+    @staticmethod
+    def _extract_text_stream_events(payload: Any) -> list[dict]:
+        """从 LangGraph messages 模式中提取 AI 可见文本增量。"""
+
+        if not isinstance(payload, tuple) or not payload:
+            return []
+        message = payload[0]
+        # LangGraph messages 模式实际输出的是 AIMessageChunk；不能只判断
+        # 最终消息的 ``ai`` 类型，否则 token 会被全部丢弃而退化为一次性返回。
+        message_type = str(getattr(message, "type", "")).lower()
+        if message_type not in {"ai", "assistant", "aimessagechunk"}:
+            return []
+        # 工具调用阶段的 chunk 可能包含参数片段或模型内部过程，不能输出给客户端。
+        if getattr(message, "tool_call_chunks", None) or getattr(message, "tool_calls", None):
+            return []
+        content = getattr(message, "content", "")
+        if not isinstance(content, str) or not content:
+            return []
+        return [{"event": "content_delta", "data": {"content": content}}]
+
+    @classmethod
+    def _extract_tool_stream_events(
+        cls,
+        *,
+        payload: Any,
+        started_tool_call_ids: set[str],
+        completed_tool_call_ids: set[str],
+    ) -> list[dict]:
+        """把 Graph 节点更新转换为工具开始/结束事件。"""
+
+        if not isinstance(payload, dict):
+            return []
+
+        events: list[dict] = []
+        for update in payload.values():
+            if not isinstance(update, dict):
+                continue
+            for message in update.get("messages", []):
+                message_type = getattr(message, "type", None)
+                if message_type in {"ai", "assistant"}:
+                    for tool_call in getattr(message, "tool_calls", []) or []:
+                        tool_name = tool_call.get("name", "unknown_tool")
+                        call_id = tool_call.get("id") or f"{tool_name}:{len(started_tool_call_ids)}"
+                        if call_id in started_tool_call_ids:
+                            continue
+                        started_tool_call_ids.add(call_id)
+                        events.append(
+                            {
+                                "event": "tool_start",
+                                "data": {
+                                    "tool": tool_name,
+                                    "display": cls._tool_display_name(tool_name, started=True),
+                                },
+                            }
+                        )
+                elif message_type == "tool":
+                    tool_name = getattr(message, "name", None) or "unknown_tool"
+                    call_id = getattr(message, "tool_call_id", None) or f"{tool_name}:{len(completed_tool_call_ids)}"
+                    if call_id in completed_tool_call_ids:
+                        continue
+                    completed_tool_call_ids.add(call_id)
+                    events.append(
+                        {
+                            "event": "tool_end",
+                            "data": {
+                                "tool": tool_name,
+                                "display": cls._tool_display_name(tool_name, started=False),
+                            },
+                        }
+                    )
+        return events
+
+    @staticmethod
+    def _tool_display_name(tool_name: str, *, started: bool) -> str:
+        """返回不含候选人数据的前端过程提示。"""
+
+        action = "正在" if started else "已完成"
+        tool_display_map = {
+            "search_talent_pool": "检索人才库",
+            "get_candidate_detail": "获取候选人详情",
+            "compare_candidates": "对比候选人",
         }
+        return f"{action}{tool_display_map.get(tool_name, '调用工具')}"
 
     @staticmethod
     async def _get_owned_conversation_or_raise(*, repo, conversation_id: str, user_id: str):
