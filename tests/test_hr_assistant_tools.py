@@ -52,6 +52,7 @@ def test_build_candidate_detail_hides_sensitive_fields():
     assert detail["profile"]["skills"] == "Python, FastAPI, Milvus"
 
     # 工具返回中不应该包含敏感字段。
+    assert "gender" not in detail
     assert "email" not in detail
     assert "phone_number" not in detail
     assert "birthday" not in detail

@@ -44,5 +44,15 @@ async def get_super_user(
     else:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足，无法访问！")
 
+
+async def get_hr_assistant_user(
+    current_user: UserModel = Depends(get_current_user),
+) -> UserModel:
+    """限制招聘助手只向 HR 和超级管理员开放。"""
+
+    if current_user.is_superuser or current_user.is_hr:
+        return current_user
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅HR或超级管理员可使用招聘助手！")
+
 def get_cache_instance():
     return HRCache()

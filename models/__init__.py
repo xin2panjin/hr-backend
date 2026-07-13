@@ -67,3 +67,4 @@ from . import interview
 from . import candidate
 from . import candidate_search
 from . import candidate_agent
+from . import assistant_conversation

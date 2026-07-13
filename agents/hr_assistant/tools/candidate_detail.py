@@ -23,9 +23,8 @@ def _build_candidate_detail(candidate) -> dict:
     return {
         "candidate_id": candidate.id,
         "name": candidate.name,
-        "gender": candidate.gender.value if candidate.gender else None,
         "status": candidate.status.value if candidate.status else None,
-        # 默认不返回手机号、邮箱、生日，避免对话中泄露敏感信息。
+        # 默认不返回性别、手机号、邮箱、生日等敏感信息，避免对话中泄露。
         "position": {
             "id": candidate.position.id if candidate.position else None,
             "title": candidate.position.title if candidate.position else None,
