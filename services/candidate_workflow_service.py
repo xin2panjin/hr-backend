@@ -6,9 +6,19 @@ from agents.candidate.agent import CandidateProcessAgent
 from agents.candidate.state import CandidateEventType
 from models import AsyncSessionFactory
 from repository.candidate_repo import CandidateRepo
+from repository.candidate_search_repo import (
+    CandidateIndexOutboxRepo,
+    CandidateSearchProfileRepo,
+)
 from schemas.candidate_schema import CandidateSchema
 from schemas.position_schema import PositionSchema
 from schemas.user_schema import UserSchema
+from services.candidate_index_sync_service import CandidateIndexSyncService
+from services.candidate_search_profile_service import CandidateSearchProfileService
+
+
+class CandidateEmailNotFoundError(ValueError):
+    """收到的邮件发件人未对应系统候选人时抛出。"""
 
 
 class CandidateWorkflowService:
@@ -84,10 +94,37 @@ class CandidateWorkflowService:
             "event_type": event_type,
         }
         async with CandidateProcessAgent() as agent:
-            return await agent.ainvoke(
+            response = await agent.ainvoke(
                 state=state,
                 thread_id=thread_id,
             )
+
+        # Agent 节点可能通过 AI 评分、确认面试或拒绝面试修改候选人状态。
+        # Graph 成功结束后统一刷新画像，并在事务提交后同步索引。
+        await self._refresh_candidate_search_profile_and_sync(candidate.id)
+
+        return response
+
+    async def _refresh_candidate_search_profile_and_sync(
+        self,
+        candidate_id: str,
+    ) -> None:
+        """按最新业务数据重建候选人画像并同步待处理索引事件。"""
+
+        async with AsyncSessionFactory() as session:
+            async with session.begin():
+                candidate = await CandidateRepo(session).get_by_id(candidate_id)
+                if not candidate:
+                    raise ValueError(f"候选人不存在：{candidate_id}")
+
+                profile_service = CandidateSearchProfileService(
+                    profile_repo=CandidateSearchProfileRepo(session),
+                    outbox_repo=CandidateIndexOutboxRepo(session),
+                )
+                await profile_service.rebuild_candidate_profile(candidate)
+
+        # 事务提交后再调用 Embedding 和 Milvus。
+        await CandidateIndexSyncService().sync_pending_events(limit=20)
 
     async def _load_context_by_candidate_id(
         self,
@@ -110,7 +147,9 @@ class CandidateWorkflowService:
             async with session.begin():
                 candidate_model = await CandidateRepo(session).get_latest_by_email(email)
                 if not candidate_model:
-                    raise ValueError(f"未找到邮箱对应的候选人：{email}")
+                    raise CandidateEmailNotFoundError(
+                        f"未找到邮箱对应的候选人：{email}"
+                    )
                 return self._build_context(candidate_model)
 
     @staticmethod

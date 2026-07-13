@@ -3,53 +3,61 @@ from types import SimpleNamespace
 import pytest
 
 from models.candidate import CandidateStatusEnum
+from rag.retrieval_types import RetrievalHit, RetrievalMode, RetrievalSource
 from services.talent_search_service import TalentSearchService
 
 
-class FakeEmbeddingService:
-    async def embed_query(self, text):
-        return [0.1] * 1024
-
-
-class FakeMilvusClient:
+class FakeRetriever:
     def __init__(self):
-        self.search_calls = []
+        self.calls = []
 
-    def search(self, **kwargs):
-        self.search_calls.append(kwargs)
+    async def retrieve(self, request, *, mode):
+        self.calls.append((request, mode))
         return [
-            [
-                {
-                    "distance": 0.91,
-                    "entity": {
-                        "candidate_id": "candidate-1",
-                        "profile_text": "Python FastAPI 大模型应用",
-                    },
-                }
-            ]
+            RetrievalHit(
+                candidate_id="candidate-1",
+                score=0.91,
+                profile_text="Python FastAPI 大模型应用",
+                rank_source=RetrievalSource.HYBRID,
+            ),
+            RetrievalHit(
+                candidate_id="candidate-2",
+                score=0.80,
+                profile_text="Python 风控平台",
+                rank_source=RetrievalSource.HYBRID,
+            ),
         ]
 
 
 class FakeCandidateRepo:
     async def list_visible_by_ids(self, *, candidate_ids, current_user):
-        assert candidate_ids == ["candidate-1"]
+        assert candidate_ids == ["candidate-1", "candidate-2"]
         return [
             SimpleNamespace(
                 id="candidate-1",
                 name="张三",
                 status=CandidateStatusEnum.APPLICATION,
                 position=SimpleNamespace(title="后端工程师"),
-            )
+            ),
+            SimpleNamespace(
+                id="candidate-2",
+                name="李四",
+                status=CandidateStatusEnum.APPLICATION,
+                position=SimpleNamespace(title="Python 工程师"),
+            ),
         ]
 
 
 @pytest.mark.asyncio
-async def test_talent_search_returns_candidates():
-    milvus_client = FakeMilvusClient()
+async def test_talent_search_returns_candidates(monkeypatch):
+    from settings import settings
+
+    # 该测试验证 hybrid 契约，不能依赖开发机 .env 的实际检索模式。
+    monkeypatch.setattr(settings, "TALENT_SEARCH_RETRIEVAL_MODE", "hybrid")
+    retriever = FakeRetriever()
     service = TalentSearchService(
         candidate_repo=FakeCandidateRepo(),
-        embedding_service=FakeEmbeddingService(),
-        milvus_client=milvus_client,
+        retriever=retriever,
     )
     current_user = SimpleNamespace(
         id="user-1",
@@ -65,15 +73,14 @@ async def test_talent_search_returns_candidates():
     assert result[0]["candidate_id"] == "candidate-1"
     assert result[0]["name"] == "张三"
     assert result[0]["score"] == 0.91
-    assert milvus_client.search_calls[0]["collection_name"] == "candidate_profiles_v1"
-
+    assert len(result) == 2
+    assert retriever.calls[0][1] == RetrievalMode.HYBRID
 
 @pytest.mark.asyncio
 async def test_talent_search_builds_creator_filter_for_normal_user():
     service = TalentSearchService(
         candidate_repo=FakeCandidateRepo(),
-        embedding_service=FakeEmbeddingService(),
-        milvus_client=FakeMilvusClient(),
+        retriever=FakeRetriever(),
     )
     current_user = SimpleNamespace(
         id="user-1",
@@ -88,3 +95,65 @@ async def test_talent_search_builds_creator_filter_for_normal_user():
     )
 
     assert milvus_filter == 'creator_id == "user-1"'
+
+
+@pytest.mark.asyncio
+async def test_talent_search_passes_configured_recall_parameters_and_keeps_top_k(monkeypatch):
+    from settings import settings
+
+    # 该测试验证 hybrid 契约，不能依赖开发机 .env 的实际检索模式。
+    monkeypatch.setattr(settings, "TALENT_SEARCH_RETRIEVAL_MODE", "hybrid")
+    retriever = FakeRetriever()
+    service = TalentSearchService(
+        candidate_repo=FakeCandidateRepo(),
+        retriever=retriever,
+    )
+    current_user = SimpleNamespace(id="user-1", is_superuser=True, is_hr=False)
+
+    result = await service.search(
+        query="Python",
+        current_user=current_user,
+        top_k=1,
+    )
+
+    request, mode = retriever.calls[0]
+    assert mode == RetrievalMode.HYBRID
+    assert request.dense_recall_k == 30
+    assert request.sparse_recall_k == 30
+    assert request.hybrid_limit == 30
+    assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_talent_search_uses_sparse_mode_from_settings(monkeypatch):
+    from settings import settings
+
+    monkeypatch.setattr(settings, "TALENT_SEARCH_RETRIEVAL_MODE", "sparse")
+    retriever = FakeRetriever()
+    service = TalentSearchService(
+        candidate_repo=FakeCandidateRepo(),
+        retriever=retriever,
+    )
+    current_user = SimpleNamespace(id="user-1", is_superuser=True, is_hr=False)
+
+    await service.search(query="Python", current_user=current_user)
+
+    assert retriever.calls[0][1] == RetrievalMode.SPARSE
+
+
+@pytest.mark.asyncio
+async def test_talent_search_allows_internal_evaluation_mode_override():
+    retriever = FakeRetriever()
+    service = TalentSearchService(
+        candidate_repo=FakeCandidateRepo(),
+        retriever=retriever,
+    )
+    current_user = SimpleNamespace(id="user-1", is_superuser=True, is_hr=False)
+
+    await service.search(
+        query="Python",
+        current_user=current_user,
+        retrieval_mode=RetrievalMode.DENSE,
+    )
+
+    assert retriever.calls[0][1] == RetrievalMode.DENSE

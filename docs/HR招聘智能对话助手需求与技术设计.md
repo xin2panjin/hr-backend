@@ -537,7 +537,7 @@ Milvus Collection创建不能依赖每次请求临时执行，应通过独立初
 
 ### 10.1 第一阶段 Collection
 
-Collection 名称建议：`candidate_profiles_v1`
+Collection 名称建议：`candidate_profiles`
 
 第一阶段采用“一名候选人一条 Entity”的模型：
 

@@ -20,13 +20,32 @@ class CandidateSearchProfileService:
         self.profile_repo = profile_repo
         self.outbox_repo = outbox_repo
 
-    async def rebuild_candidate_profile(self, candidate: CandidateModel):
-        """重建单个候选人的检索画像，并写入索引同步事件。"""
+    async def rebuild_candidate_profile(
+        self,
+        candidate: CandidateModel,
+        *,
+        force_reindex: bool = False,
+    ):
+        """重建单个候选人的检索画像。
+
+        默认只有画像内容发生变化时才创建新的 Outbox 事件，避免工作流重放
+        或重复调用时产生无意义的索引版本和向量写入。
+
+        ``force_reindex`` 仅供全量回灌使用。即使画像文本未变化，也会递增
+        版本并创建新的事件，以便在 Milvus Collection 被重建后重新写入数据。
+        """
 
         old_profile = await self.profile_repo.get_by_candidate_id(candidate.id)
-        next_version = 1 if old_profile is None else old_profile.profile_version + 1
-
         profile_text = self.build_profile_text(candidate)
+
+        if (
+            old_profile
+            and old_profile.profile_text == profile_text
+            and not force_reindex
+        ):
+            return old_profile
+
+        next_version = 1 if old_profile is None else old_profile.profile_version + 1
 
         profile = await self.profile_repo.upsert_profile(
             candidate_id=candidate.id,

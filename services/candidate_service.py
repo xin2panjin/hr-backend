@@ -76,6 +76,11 @@ class CandidateService:
             status=status_data.status,
         )
 
+        # Repository 使用 SQL UPDATE，不会自动同步已加载 ORM 对象的状态。
+        # 画像文本包含当前状态，因此需要更新内存对象后写入新的 Outbox 事件。
+        candidate.status = status_data.status
+        await self.search_profile_service.rebuild_candidate_profile(candidate)
+
     def _validate_status_transition(
         self,
         current_status: CandidateStatusEnum,

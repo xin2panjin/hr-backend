@@ -1,10 +1,24 @@
-from core.single import SingletonMeta
+from threading import Lock
+
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from settings import settings
 from schemas.cache_schema import InviteInfoSchema, DingTalkTokenInfoSchema, TaskInfoSchema
 
-class HRCache(metaclass=SingletonMeta):
+class _CacheSingletonMeta(type):
+    """仅供 HRCache 使用的线程安全单例元类。"""
+
+    _instances: dict[type, object] = {}
+    _lock = Lock()
+
+    def __call__(cls, *args, **kwargs):
+        with cls._lock:
+            if cls not in cls._instances:
+                cls._instances[cls] = super().__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+
+class HRCache(metaclass=_CacheSingletonMeta):
     invite_prefix = "invite:"
     dingtalk_prefix = "dingtalk:"
     task_prefix = "task:"

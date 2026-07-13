@@ -8,7 +8,7 @@ from models.candidate import CandidateAIScoreModel
 from sqlalchemy.orm import selectinload
 from models.candidate import CandidateStatusEnum
 from models.user import UserModel
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_
 
 
 class ResumeRepo(BaseRepo):
@@ -61,6 +61,42 @@ class CandidateRepo(BaseRepo):
             .order_by(CandidateModel.created_at.desc())
             .limit(1)
         )
+
+    async def list_for_indexing(
+        self,
+        *,
+        limit: int,
+        cursor_created_at: datetime | None = None,
+        cursor_id: str | None = None,
+    ) -> list[CandidateModel]:
+        """按稳定游标分页读取候选人，用于检索索引全量回灌。
+
+        该查询不做调用人的权限过滤，因为回灌属于系统级维护任务；候选人
+        权限仍会在检索阶段通过 Milvus 条件和 PostgreSQL 二次复核执行。
+        """
+
+        if limit <= 0:
+            raise ValueError("limit 必须大于 0")
+
+        stmt = (
+            select(CandidateModel)
+            .options(selectinload(CandidateModel.position))
+            .order_by(CandidateModel.created_at.asc(), CandidateModel.id.asc())
+            .limit(limit)
+        )
+
+        if cursor_created_at is not None and cursor_id is not None:
+            stmt = stmt.where(
+                or_(
+                    CandidateModel.created_at > cursor_created_at,
+                    and_(
+                        CandidateModel.created_at == cursor_created_at,
+                        CandidateModel.id > cursor_id,
+                    ),
+                )
+            )
+
+        return list(await self.session.scalars(stmt))
 
     async def get_list(
         self,

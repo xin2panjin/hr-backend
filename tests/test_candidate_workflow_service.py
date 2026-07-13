@@ -11,7 +11,10 @@ from schemas.position_schema import PositionSchema
 from schemas.user_schema import UserSchema
 from agents.candidate.state import CandidateEventType
 from services import candidate_workflow_service as workflow_module
-from services.candidate_workflow_service import CandidateWorkflowService
+from services.candidate_workflow_service import (
+    CandidateEmailNotFoundError,
+    CandidateWorkflowService,
+)
 
 
 class FakeCandidateProcessAgent:
@@ -148,6 +151,20 @@ def test_build_thread_id_uses_candidate_and_position_id():
     )
 
 
+@pytest.fixture(autouse=True)
+def mock_candidate_index_refresh(monkeypatch):
+    """Graph 单元测试只验证编排，不访问真实画像和 Milvus。"""
+
+    async def fake_refresh(self, candidate_id: str):
+        return None
+
+    monkeypatch.setattr(
+        CandidateWorkflowService,
+        "_refresh_candidate_search_profile_and_sync",
+        fake_refresh,
+    )
+
+
 @pytest.mark.asyncio
 async def test_run_candidate_agent_uses_stable_candidate_process_thread_id(monkeypatch):
     FakeCandidateProcessAgent.calls = []
@@ -256,3 +273,22 @@ async def test_on_candidate_created_raises_when_candidate_missing(monkeypatch):
         await CandidateWorkflowService().on_candidate_created("missing-candidate")
 
     assert "候选人不存在" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_candidate_email_uses_dedicated_error_when_sender_is_unknown(monkeypatch):
+    """Scheduler 需要用专用异常区分无关邮件与候选人流程失败。"""
+
+    FakeCandidateRepo.candidate = None
+    monkeypatch.setattr(
+        workflow_module,
+        "AsyncSessionFactory",
+        lambda: FakeSessionFactory(),
+    )
+    monkeypatch.setattr(workflow_module, "CandidateRepo", FakeCandidateRepo)
+
+    with pytest.raises(CandidateEmailNotFoundError):
+        await CandidateWorkflowService().on_candidate_email_received(
+            from_email="notice@example.com",
+            content="系统通知",
+        )

@@ -176,10 +176,12 @@ async def test_update_candidate_status_to_waiting_creates_interview_and_updates_
         build_candidate("candidate-1", CandidateStatusEnum.AI_FILTER_PASSED)
     )
     interview_service = FakeInterviewService()
+    search_profile_service = FakeSearchProfileService()
     service = CandidateService(
         session=None,
         candidate_repo=candidate_repo,
         interview_service=interview_service,
+        search_profile_service=search_profile_service,
     )
     interview_time = datetime(2026, 6, 26, 10, 0, 0)
     status_data = CandidateStatusUpdateSchema(
@@ -196,6 +198,8 @@ async def test_update_candidate_status_to_waiting_creates_interview_and_updates_
     assert candidate_repo.status_updates == [
         ("candidate-1", CandidateStatusEnum.WAITING_FOR_INTERVIEW)
     ]
+    assert search_profile_service.rebuild_calls == [candidate_repo.candidate]
+    assert search_profile_service.rebuild_calls[0].status == CandidateStatusEnum.WAITING_FOR_INTERVIEW
 
 
 @pytest.mark.asyncio
@@ -204,10 +208,12 @@ async def test_update_candidate_status_to_rejected_calls_interview_service_and_u
         build_candidate("candidate-1", CandidateStatusEnum.WAITING_FOR_INTERVIEW)
     )
     interview_service = FakeInterviewService()
+    search_profile_service = FakeSearchProfileService()
     service = CandidateService(
         session=None,
         candidate_repo=candidate_repo,
         interview_service=interview_service,
+        search_profile_service=search_profile_service,
     )
     status_data = CandidateStatusUpdateSchema(
         status=CandidateStatusEnum.INTERVIEW_REJECTED,
@@ -223,3 +229,5 @@ async def test_update_candidate_status_to_rejected_calls_interview_service_and_u
     assert candidate_repo.status_updates == [
         ("candidate-1", CandidateStatusEnum.INTERVIEW_REJECTED)
     ]
+    assert search_profile_service.rebuild_calls == [candidate_repo.candidate]
+    assert search_profile_service.rebuild_calls[0].status == CandidateStatusEnum.INTERVIEW_REJECTED

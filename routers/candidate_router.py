@@ -110,13 +110,20 @@ async def get_candidate_list(
 async def update_candidate_status(
     candidate_id: str,
     status_data: CandidateStatusUpdateSchema,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session_instance),
     current_user: UserModel = Depends(get_current_user),
 ):
     async with session.begin():
         candidate_service = CandidateService(session=session)
         await candidate_service.update_candidate_status(candidate_id, status_data, current_user)
-        return ResponseSchema()
+
+    # 数据库事务提交后再访问 Embedding 与 Milvus，避免外部依赖影响业务事务。
+    background_tasks.add_task(
+        sync_candidate_index_batch_task,
+        limit=20,
+    )
+    return ResponseSchema()
 
 @router.get("/ai-score/{candidate_id}", summary="获取候选人AI得分", response_model=CandidateAIScoreRespSchema)
 async def get_candidate_ai_score(

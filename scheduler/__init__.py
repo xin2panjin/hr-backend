@@ -6,7 +6,10 @@ from core.email_bot.settings import EmailBotSettings
 from loguru import logger
 from settings import settings
 from core.cache import HRCache
-from services.candidate_workflow_service import CandidateWorkflowService
+from services.candidate_workflow_service import (
+    CandidateEmailNotFoundError,
+    CandidateWorkflowService,
+)
 
 scheduler = AsyncIOScheduler()
 
@@ -27,25 +30,48 @@ async def poll_and_process_emails(bot: EmailBot, state: dict):
 
         workflow_service = CandidateWorkflowService()
         for mail in new_emails:
-            if mail.from_.address.lower() == bot.settings.email.lower():
+            sender_email = (mail.from_.address or "").strip().lower()
+            if sender_email == bot.settings.email.lower():
+                await _advance_email_uid(state, mail.uid)
                 continue
 
-            response = await workflow_service.on_candidate_email_received(
-                from_email=mail.from_.address,
-                content=mail.text or mail.html or "",
-            )
-            logger.info(
-                f"Processed email from {mail.from_.address}, response: {response}"
-            )
+            try:
+                response = await workflow_service.on_candidate_email_received(
+                    from_email=sender_email,
+                    content=mail.text or mail.html or "",
+                )
+            except CandidateEmailNotFoundError:
+                # 收件箱也会接收账单、系统通知等非候选人邮件；这类邮件无需重试。
+                logger.info(
+                    f"Skipped non-candidate email: sender={sender_email}, uid={mail.uid}"
+                )
+                await _advance_email_uid(state, mail.uid)
+                continue
+            except Exception as exc:
+                # 保留当前 UID，让下次轮询重试，避免真正的候选人邮件被静默丢弃。
+                logger.exception(
+                    f"Failed to process candidate email: sender={sender_email}, "
+                    f"uid={mail.uid}, error={exc}"
+                )
+                break
 
-            state["last_uid"] = max(state["last_uid"], int(mail.uid))
-            cache = HRCache()
-            await cache.set_email_last_uid(state["last_uid"])
+            logger.info(
+                f"Processed email from {sender_email}, response: {response}"
+            )
+            await _advance_email_uid(state, mail.uid)
 
         logger.info(f"Processed {len(new_emails)} new emails, last_uid now {state['last_uid']}")
 
     except Exception as e:
         logger.exception(f"Failed to poll and process emails: {e}")
+
+
+async def _advance_email_uid(state: dict, uid: str | int) -> None:
+    """更新内存与 Redis 中的邮箱游标，避免已处理邮件重复触发。"""
+
+    state["last_uid"] = max(int(state["last_uid"]), int(uid))
+    cache = HRCache()
+    await cache.set_email_last_uid(state["last_uid"])
 
 
 async def start_email_polling():
