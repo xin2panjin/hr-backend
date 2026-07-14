@@ -5,6 +5,14 @@ import pytest
 from models.candidate import CandidateStatusEnum
 from rag.retrieval_types import RetrievalHit, RetrievalMode, RetrievalSource
 from services.talent_search_service import TalentSearchService
+from iam.permissions import RoleCode
+
+
+def build_actor(user_id: str, *role_codes: str):
+    return SimpleNamespace(
+        id=user_id,
+        iam_roles=[SimpleNamespace(role=SimpleNamespace(code=role_code), scopes=[]) for role_code in role_codes],
+    )
 
 
 class FakeRetriever:
@@ -59,11 +67,7 @@ async def test_talent_search_returns_candidates(monkeypatch):
         candidate_repo=FakeCandidateRepo(),
         retriever=retriever,
     )
-    current_user = SimpleNamespace(
-        id="user-1",
-        is_superuser=True,
-        is_hr=False,
-    )
+    current_user = build_actor("user-1", RoleCode.SYSTEM_ADMIN.value)
 
     result = await service.search(
         query="找一个会 FastAPI 和大模型应用的人",
@@ -82,11 +86,7 @@ async def test_talent_search_builds_creator_filter_for_normal_user():
         candidate_repo=FakeCandidateRepo(),
         retriever=FakeRetriever(),
     )
-    current_user = SimpleNamespace(
-        id="user-1",
-        is_superuser=False,
-        is_hr=False,
-    )
+    current_user = build_actor("user-1", RoleCode.HIRING_MANAGER.value)
 
     milvus_filter = service._build_milvus_filter(
         current_user=current_user,
@@ -95,6 +95,23 @@ async def test_talent_search_builds_creator_filter_for_normal_user():
     )
 
     assert milvus_filter == 'creator_id == "user-1"'
+
+
+@pytest.mark.asyncio
+async def test_talent_search_denies_hr_without_managed_departments():
+    service = TalentSearchService(
+        candidate_repo=FakeCandidateRepo(),
+        retriever=FakeRetriever(),
+    )
+    current_user = build_actor("hr-1", RoleCode.RECRUITER.value)
+
+    milvus_filter = service._build_milvus_filter(
+        current_user=current_user,
+        position_id=None,
+        status=None,
+    )
+
+    assert milvus_filter == 'candidate_id == "__no_candidate_access__"'
 
 
 @pytest.mark.asyncio
@@ -108,7 +125,7 @@ async def test_talent_search_passes_configured_recall_parameters_and_keeps_top_k
         candidate_repo=FakeCandidateRepo(),
         retriever=retriever,
     )
-    current_user = SimpleNamespace(id="user-1", is_superuser=True, is_hr=False)
+    current_user = build_actor("user-1", RoleCode.SYSTEM_ADMIN.value)
 
     result = await service.search(
         query="Python",
@@ -134,7 +151,7 @@ async def test_talent_search_uses_sparse_mode_from_settings(monkeypatch):
         candidate_repo=FakeCandidateRepo(),
         retriever=retriever,
     )
-    current_user = SimpleNamespace(id="user-1", is_superuser=True, is_hr=False)
+    current_user = build_actor("user-1", RoleCode.SYSTEM_ADMIN.value)
 
     await service.search(query="Python", current_user=current_user)
 
@@ -148,7 +165,7 @@ async def test_talent_search_allows_internal_evaluation_mode_override():
         candidate_repo=FakeCandidateRepo(),
         retriever=retriever,
     )
-    current_user = SimpleNamespace(id="user-1", is_superuser=True, is_hr=False)
+    current_user = build_actor("user-1", RoleCode.SYSTEM_ADMIN.value)
 
     await service.search(
         query="Python",

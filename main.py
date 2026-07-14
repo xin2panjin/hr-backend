@@ -14,6 +14,7 @@ from routers.media_router import router as media_router
 from routers.talent_search_router import router as talent_search_router
 from routers.hr_assistant_router import router as hr_assistant_router
 from routers.assistant_router import router as assistant_router
+from routers.iam_router import router as iam_router
 
 from loguru import logger
 
@@ -66,6 +67,7 @@ app.add_middleware(
 )
 
 app.include_router(user_router)
+app.include_router(iam_router)
 app.include_router(position_router)
 app.include_router(candidate_router)
 app.include_router(dashboard_router)

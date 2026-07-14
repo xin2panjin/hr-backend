@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from models.candidate import CandidateStatusEnum
 from models.user import UserModel
 from sqlalchemy import func, and_, or_
+from iam.policies.candidate_policy import CandidatePolicy
 
 
 class ResumeRepo(BaseRepo):
@@ -103,43 +104,52 @@ class CandidateRepo(BaseRepo):
         current_user: UserModel,
         position_id: str|None = None,
         status: CandidateStatusEnum|None = None,
+        keyword: str | None = None,
+        creator_id: str | None = None,
+        created_at_start: datetime | None = None,
+        created_at_end: datetime | None = None,
         page: int = 1,
         size: int = 10
-    ):
-        stmt = select(CandidateModel)
-        # 按照用户的角色来查找数据
-        # 1. 如果是superuser，那么可以获取所有的候选人
-        # 2. 如果是hr，那么可以获取所负责部门的候选人
-        # 3. 如果是部门成员，那么可以获取自己发布的职位的候选人
-        if current_user.is_superuser:
-            pass
-        elif current_user.is_hr:
-            hr_user = await self.session.scalar(
-                select(UserModel)
-                .where(UserModel.id == current_user.id)
-                .options(selectinload(UserModel.managed_departments))
-            )
-            # 提取hr所负责的部门的id
-            managed_department_ids = [
-                d.id for d in hr_user.managed_departments
-            ]
-            if len(managed_department_ids) == 0:
-                return []
-            # 用连接的形式过滤候选人
-            stmt = stmt.join(PositionModel).where(PositionModel.department_id.in_(managed_department_ids))
-        else:
-            # 普通成员
-            stmt = stmt.join(PositionModel).where(PositionModel.creator_id == current_user.id)
+    ) -> tuple[list[CandidateModel], int]:
+        filters = []
 
         if position_id is not None:
-            stmt = stmt.where(CandidateModel.position_id == position_id)
+            filters.append(CandidateModel.position_id == position_id)
 
         if status is not None:
-            stmt = stmt.where(CandidateModel.status == status)
+            filters.append(CandidateModel.status == status)
+
+        if creator_id is not None:
+            filters.append(CandidateModel.creator_id == creator_id)
+
+        if created_at_start is not None:
+            filters.append(CandidateModel.created_at >= created_at_start)
+
+        if created_at_end is not None:
+            filters.append(CandidateModel.created_at <= created_at_end)
+
+        if keyword and keyword.strip():
+            pattern = f"%{keyword.strip()}%"
+            filters.append(
+                or_(
+                    CandidateModel.name.ilike(pattern),
+                    CandidateModel.email.ilike(pattern),
+                    CandidateModel.phone_number.ilike(pattern),
+                )
+            )
+
+        scope = CandidatePolicy.resolve_scope(current_user)
+        stmt = CandidatePolicy.apply_sql_scope(select(CandidateModel), scope).where(*filters)
+        count_stmt = CandidatePolicy.apply_sql_scope(
+            select(func.count(CandidateModel.id)),
+            scope,
+        ).where(*filters)
+
+        total = int(await self.session.scalar(count_stmt) or 0)
 
         offset = (page - 1) * size
         stmt = stmt.offset(offset).limit(size).order_by(CandidateModel.created_at.desc())
-        return await self.session.scalars(stmt)
+        return list(await self.session.scalars(stmt)), total
 
     async def candidate_count(self, start_time: datetime, end_time: datetime):
         stmt = select(
@@ -179,25 +189,10 @@ class CandidateRepo(BaseRepo):
             )
         )
 
-        if current_user.is_superuser:
-            pass
-        elif current_user.is_hr:
-            hr_user = await self.session.scalar(
-                select(UserModel)
-                .where(UserModel.id == current_user.id)
-                .options(selectinload(UserModel.managed_departments))
-            )
-            managed_department_ids = [d.id for d in hr_user.managed_departments]
-            if not managed_department_ids:
-                return []
-
-            stmt = stmt.join(PositionModel).where(
-                PositionModel.department_id.in_(managed_department_ids)
-            )
-        else:
-            stmt = stmt.join(PositionModel).where(
-                PositionModel.creator_id == current_user.id
-            )
+        stmt = CandidatePolicy.apply_sql_scope(
+            stmt,
+            CandidatePolicy.resolve_scope(current_user),
+        )
 
         result = await self.session.scalars(stmt)
         candidates = list(result)

@@ -1,35 +1,35 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends
 
-from core.cache import HRCache, InviteInfoSchema, DingTalkTokenInfoSchema
+from core.cache import HRCache, DingTalkTokenInfoSchema
 from schemas.user_schema import (
     UserLoginSchema,
     UserLoginRespSchema,
-    UserInviteSchema,
     UserRegisterSchema,
-    UserListRespSchema,
-    UserStatusUpdateSchema,
-    DepartmentListRespSchema,
     DingdingUserRespSchema,
-    AssignDepartmentSchema,
-    HrListRespSchema
 )
 from dependencies import (
     get_session_instance,
     get_auth_handler,
     AuthHandler,
     get_cache_instance,
-    get_super_user,
-    get_current_user
+    get_current_user,
+    get_refresh_token_claims,
 )
 from models import AsyncSession
-from repository.user_repo import UserRepo, DepartmentRepo
+from repository.user_repo import UserRepo
 from models.user import UserModel, UserStatus
 from fastapi.exceptions import HTTPException
 from fastapi import status
-import string
-import random
-from tasks.email_tasks import send_invite_email_task
+from iam.services.invitation_service import (
+    InvitationConflict,
+    InvitationService,
+    InvitationValidationError,
+)
+from iam.services.auth_session_service import AuthSessionService, SessionValidationError
+from iam.services.password_policy import PasswordPolicyError
+from iam.services.oauth_state_service import OAuthStateService, OAuthStateValidationError
 from schemas import ResponseSchema
+from schemas.user_schema import TokenPairSchema
 from settings import settings
 from urllib.parse import urlencode, urljoin
 from core.dingtalk import DingTalkApi
@@ -56,7 +56,7 @@ async def login(
     async with session.begin():
         # 1. 获取用户
         user_repo = UserRepo(session)
-        user: UserModel = await user_repo.get_by_email(str(login_data.email))
+        user: UserModel = await user_repo.get_by_login_account(login_data.account)
         if not user:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="该用户不存在！")
         # 2. 验证密码是否正确
@@ -65,130 +65,74 @@ async def login(
         # 3. 判断员工状态
         if user.status != UserStatus.ACTIVE:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="该员工状态不可用，请联系管理员！")
-        # 4. 生成JWToken
-        tokens = auth_handler.encode_login_token(user.id)
+        # 4. 创建服务端会话并签发绑定 sid/authz_version 的令牌对。
+        tokens = await AuthSessionService(session, auth_handler).create_login_session(user)
         return {
             "access_token": tokens['access_token'],
             "refresh_token": tokens['refresh_token'],
             "user": user
         }
 
-@router.post('/invite', summary="邀请用户，会给指定的邮箱发送邮件", response_model=ResponseSchema)
-async def invite(
-    invite_data: UserInviteSchema,
-    background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_session_instance),
-    cache: HRCache = Depends(get_cache_instance),
-    _: UserModel = Depends(get_super_user)
-):
-    email = invite_data.email
-    department_id = invite_data.department_id
-    async with session.begin():
-        # 1. 先校验这个邮箱是否在数据库已经存在了
-        user_repo = UserRepo(session)
-        user: UserModel = await user_repo.get_by_email(str(email))
-        if user:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该邮箱已被注册！")
-        # 2. 校验department_id在数据库中是否存在
-        department_repo = DepartmentRepo(session)
-        department = await department_repo.get_by_id(department_id)
-        if not department:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该部门不存在！")
-    # 3. 生成邀请码
-    invite_code = "".join(random.sample(string.digits, 6))
-    # 4. 将邀请信息保存到缓存中
-    await cache.set_invite_info(InviteInfoSchema(email=email, department_id=department_id, invite_code=invite_code))
-    # 5. 给指定邮箱账号发送邮件
-    # await send_invite_email_task(email, invite_code)
-    background_tasks.add_task(
-        send_invite_email_task,
-        email=str(email),
-        invite_code=invite_code,
-    )
-    return ResponseSchema()
 
+@router.post("/refresh", summary="轮换刷新令牌", response_model=TokenPairSchema)
+async def refresh_login_token(
+    refresh_claims: dict = Depends(get_refresh_token_claims),
+    session: AsyncSession = Depends(get_session_instance),
+    auth_handler: AuthHandler = Depends(get_auth_handler),
+):
+    try:
+        async with session.begin():
+            tokens = await AuthSessionService(session, auth_handler).rotate_refresh_token(
+                refresh_claims
+            )
+    except SessionValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+    return {"access_token": tokens["access_token"], "refresh_token": tokens["refresh_token"]}
 @router.post("/register", summary="注册")
 async def register(
     register_data: UserRegisterSchema,
     session: AsyncSession = Depends(get_session_instance),
-    cache: HRCache = Depends(get_cache_instance),
 ):
     email = register_data.email
-    # 1. 校验邮箱和邀请码是否正确
-    invite_info: InviteInfoSchema = await cache.get_invite_info(str(email))
-    if not invite_info:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该邮箱账号不存在！")
-    if invite_info.invite_code != register_data.invite_code:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请码错误！")
-
     async with session.begin():
-        # 3. 校验邮箱是否已经注册
-        user_repo = UserRepo(session)
-        user: UserModel = await user_repo.get_by_email(str(email))
-        if user:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该邮箱已被注册！")
-        # 4. 创建用户
-        await user_repo.create_user({
-            "email": email,
-            "username": register_data.username,
-            "realname": register_data.realname,
-            "password": register_data.password,
-            "department_id": invite_info.department_id,
-        })
+        try:
+            user = await InvitationService(session).register_from_invitation(
+                email=str(email),
+                invite_code=register_data.invite_code,
+                user_data={
+                    "username": register_data.username,
+                    "realname": register_data.realname,
+                    "password": register_data.password,
+                },
+            )
+        except InvitationValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except InvitationConflict as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        except PasswordPolicyError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
     return ResponseSchema()
-
-@router.get("/list", summary="获取员工列表", response_model=UserListRespSchema)
-async def user_list(
-    page: int = 1,
-    size: int = 10,
-    department_id: str|None = None,
-    _: UserModel = Depends(get_super_user),
-    session: AsyncSession = Depends(get_session_instance),
-):
-    async with session.begin():
-        user_repo = UserRepo(session)
-        users = await user_repo.get_user_list(page=page, size=size, department_id=department_id)
-        total = await user_repo.get_user_count(department_id=department_id)
-    return {"users": users, "total": total}
-
-@router.patch("/status/update", summary="修改员工状态", response_model=ResponseSchema)
-async def update_status(
-    status_data: UserStatusUpdateSchema,
-    session: AsyncSession = Depends(get_session_instance),
-    _: UserModel = Depends(get_super_user),
-):
-    async with session.begin():
-        user_repo = UserRepo(session)
-        user: UserModel = await user_repo.get_by_id(status_data.user_id)
-        if not user:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该员工不存在！")
-        if user.is_superuser:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能修改超级用户的状态！")
-        user.status = status_data.status
-    return ResponseSchema()
-
-@router.get("/department/list", summary="获取所有部门列表", response_model=DepartmentListRespSchema)
-async def department_list(
-    session: AsyncSession = Depends(get_session_instance),
-    _: str = Depends(get_current_user),
-):
-    async with session.begin():
-        department_repo = DepartmentRepo(session)
-        departments = await department_repo.get_department_list()
-        return {"departments": departments}
 
 @router.get("/dingtalk/authorize", summary="获取登录钉钉的URL")
 async def dingtalk_authorize(
     current_user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session_instance),
 ):
     # redirect_uri：必须是公网能够访问的url
     redirect_uri = urljoin(settings.BACKEND_BASE_URL, "/user/dingtalk/callback")
+    async with session.begin():
+        state = await OAuthStateService(session).create_state(
+            provider="dingtalk",
+            user_id=current_user.id,
+            redirect_uri=redirect_uri,
+        )
     params = {
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "client_id": settings.DINGTALK_CLIENT_ID,
         "scope": "openid",
-        "state": current_user.id,
+        "state": state,
         "prompt": "consent"
     }
     authorize_url = f"https://login.dingtalk.com/oauth2/auth?{urlencode(params)}"
@@ -202,7 +146,18 @@ async def dingtalk_callback(
     session: AsyncSession = Depends(get_session_instance),
     cache: HRCache = Depends(get_cache_instance)
 ):
-    user_id = state
+    try:
+        async with session.begin():
+            user_id = await OAuthStateService(session).consume_state(
+                provider="dingtalk",
+                state=state,
+            )
+    except OAuthStateValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    authorization_code = authCode or code
+    if not authorization_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="缺少钉钉授权码")
     async with httpx.AsyncClient() as client:
         # 1. 获取token
         token_resp = await client.post(
@@ -210,7 +165,7 @@ async def dingtalk_callback(
             json={
                 "clientId": settings.DINGTALK_CLIENT_ID,
                 "clientSecret": settings.DINGTALK_CLIENT_SECRET,
-                "code": authCode,
+                "code": authorization_code,
                 "grantType": "authorization_code"
             }
         )
@@ -273,27 +228,3 @@ async def dingtalk_account(
         user_repo = UserRepo(session)
         dingding_user = await user_repo.get_dingding_user(current_user.id)
     return {"dingding_user": dingding_user}
-
-@router.post("/assign/department", summary="分配部门给指定的HR", response_model=ResponseSchema)
-async def assign_department(
-    assign_data: AssignDepartmentSchema,
-    session: AsyncSession = Depends(get_session_instance),
-    _: UserModel = Depends(get_super_user),
-):
-    async with session.begin():
-        user_repo = UserRepo(session)
-        try:
-            await user_repo.assign_department(hr_id=assign_data.hr_id, department_ids=assign_data.department_ids)
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        return ResponseSchema()
-
-@router.get("/hr/list", summary="获取HR列表", response_model=HrListRespSchema)
-async def get_hr_list(
-    session: AsyncSession = Depends(get_session_instance),
-    _: UserModel = Depends(get_super_user),
-):
-    async with session.begin():
-        user_repo = UserRepo(session)
-        hrs = await user_repo.get_hr_list()
-        return {"hrs": hrs}

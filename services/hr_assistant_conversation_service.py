@@ -41,7 +41,15 @@ class HRAssistantConversationService:
                     title=title,
                 )
 
-    async def list_conversations(self, *, user_id: str, page: int, size: int):
+    async def list_conversations(
+        self,
+        *,
+        user_id: str,
+        page: int,
+        size: int,
+        status: AssistantConversationStatusEnum | None = None,
+        keyword: str | None = None,
+    ):
         """分页查看当前用户自己的会话。"""
 
         async with AsyncSessionFactory() as session:
@@ -50,6 +58,8 @@ class HRAssistantConversationService:
                     user_id=user_id,
                     page=page,
                     size=size,
+                    status=status,
+                    keyword=keyword,
                 )
 
     async def list_messages(self, *, user_id: str, conversation_id: str):

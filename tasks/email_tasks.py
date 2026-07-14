@@ -19,11 +19,12 @@ async def send_email_task(message: MessageSchema):
 async def send_invite_email_task(
     email: str,
     invite_code: str,
+    username: str,
 ):
     message = MessageSchema(
         subject="智能HR系统 注册邀请",
         recipients=[email],
-        body=f"您好，您的邮箱是：{email}，验证码是：{invite_code}，一天内有效。",
+        body=f"您好，您的登录用户名是：{username}，邮箱是：{email}，邀请码是：{invite_code}，请在有效期内完成注册。",
         subtype="plain",
     )
     await send_email_task(message)

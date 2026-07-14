@@ -16,16 +16,17 @@ async def ocr_parse_resume_task(
     resume_id: str,
     task_id: str,
 ):
-    async with AsyncSessionFactory() as session:
-        async with session.begin():
-            resume_repo = ResumeRepo(session=session)
-            resume: ResumeModel = await resume_repo.get_by_id(resume_id)
-
-    file_path = os.path.join(settings.RESUME_DIR, resume.file_path)
     cache: HRCache = get_cache_instance()
-    await cache.set_task_info(TaskInfoSchema(task_id=task_id, status="pending"))
 
     try:
+        async with AsyncSessionFactory() as session:
+            async with session.begin():
+                resume_repo = ResumeRepo(session=session)
+                resume: ResumeModel | None = await resume_repo.get_by_id(resume_id)
+        if not resume:
+            raise ValueError("简历不存在或已被删除")
+
+        file_path = os.path.join(settings.RESUME_DIR, resume.file_path)
         try:
             paddle_ocr = PaddleOcr()
             job_id = await paddle_ocr.create_job(file_path)

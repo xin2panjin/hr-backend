@@ -49,13 +49,19 @@ class AssistantConversationRepo(BaseRepo):
         user_id: str,
         page: int,
         size: int,
+        status: AssistantConversationStatusEnum | None = None,
+        keyword: str | None = None,
     ) -> tuple[list[AssistantConversationModel], int]:
         """分页返回当前用户未删除的会话。"""
 
-        filters = (
+        filters = [
             AssistantConversationModel.user_id == user_id,
             AssistantConversationModel.status != AssistantConversationStatusEnum.DELETED,
-        )
+        ]
+        if status is not None:
+            filters.append(AssistantConversationModel.status == status)
+        if keyword and keyword.strip():
+            filters.append(AssistantConversationModel.title.ilike(f"%{keyword.strip()}%"))
         total = await self.session.scalar(
             select(func.count(AssistantConversationModel.id)).where(*filters)
         )

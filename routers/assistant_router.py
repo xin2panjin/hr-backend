@@ -6,7 +6,8 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
-from dependencies import get_hr_assistant_user
+from dependencies import require_permission
+from iam.permissions import PermissionCode
 from models.assistant_conversation import AssistantConversationStatusEnum
 from models.user import UserModel
 from schemas.assistant_conversation_schema import (
@@ -74,7 +75,7 @@ def _format_sse(event: str, data: dict) -> str:
 @router.post("/conversations", response_model=CreateAssistantConversationRespSchema, summary="创建招聘助手会话")
 async def create_conversation(
     data: CreateAssistantConversationReqSchema,
-    current_user: UserModel = Depends(get_hr_assistant_user),
+    current_user: UserModel = Depends(require_permission(PermissionCode.ASSISTANT_USE)),
 ):
     conversation = await HRAssistantConversationService().create_conversation(
         user_id=current_user.id,
@@ -87,12 +88,16 @@ async def create_conversation(
 async def list_conversations(
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
-    current_user: UserModel = Depends(get_hr_assistant_user),
+    conversation_status: AssistantConversationStatusEnum | None = Query(default=None, alias="status"),
+    keyword: str | None = Query(default=None, max_length=100),
+    current_user: UserModel = Depends(require_permission(PermissionCode.ASSISTANT_USE)),
 ):
     conversations, total = await HRAssistantConversationService().list_conversations(
         user_id=current_user.id,
         page=page,
         size=size,
+        status=conversation_status,
+        keyword=keyword,
     )
     return {
         "items": [_conversation_schema(item) for item in conversations],
@@ -109,7 +114,7 @@ async def list_conversations(
 )
 async def list_conversation_messages(
     conversation_id: str,
-    current_user: UserModel = Depends(get_hr_assistant_user),
+    current_user: UserModel = Depends(require_permission(PermissionCode.ASSISTANT_USE)),
 ):
     try:
         messages = await HRAssistantConversationService().list_messages(
@@ -129,7 +134,7 @@ async def list_conversation_messages(
 async def send_conversation_message(
     conversation_id: str,
     data: SendAssistantMessageReqSchema,
-    current_user: UserModel = Depends(get_hr_assistant_user),
+    current_user: UserModel = Depends(require_permission(PermissionCode.ASSISTANT_USE)),
 ):
     try:
         return await HRAssistantConversationService().send_message(
@@ -150,7 +155,7 @@ async def stream_conversation_message(
     conversation_id: str,
     data: SendAssistantMessageReqSchema,
     request: Request,
-    current_user: UserModel = Depends(get_hr_assistant_user),
+    current_user: UserModel = Depends(require_permission(PermissionCode.ASSISTANT_USE)),
 ):
     """输出模型文本和工具过程；最终回答仍由 Service 统一持久化。"""
 
@@ -192,7 +197,7 @@ async def stream_conversation_message(
 async def update_conversation(
     conversation_id: str,
     data: UpdateAssistantConversationReqSchema,
-    current_user: UserModel = Depends(get_hr_assistant_user),
+    current_user: UserModel = Depends(require_permission(PermissionCode.ASSISTANT_USE)),
 ):
     try:
         conversation = await HRAssistantConversationService().update_conversation(
@@ -214,7 +219,7 @@ async def update_conversation(
     "/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT, summary="删除招聘助手会话")
 async def delete_conversation(
     conversation_id: str,
-    current_user: UserModel = Depends(get_hr_assistant_user),
+    current_user: UserModel = Depends(require_permission(PermissionCode.ASSISTANT_USE)),
 ):
     try:
         await HRAssistantConversationService().delete_conversation(

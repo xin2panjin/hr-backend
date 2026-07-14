@@ -16,6 +16,7 @@ from rag.retrieval_types import (
 from rag.retrievers.milvus_hybrid_retriever import MilvusHybridRetriever
 from repository.candidate_repo import CandidateRepo
 from settings import settings
+from iam.policies.candidate_policy import CandidatePolicy
 
 
 class TalentSearchService:
@@ -31,6 +32,7 @@ class TalentSearchService:
         milvus_client=None,
         retriever: MilvusHybridRetriever | None = None,
         reranker: Reranker | None = None,
+        candidate_policy: type[CandidatePolicy] = CandidatePolicy,
     ):
         self.candidate_repo = candidate_repo
         # 保留 embedding_service、milvus_client 参数，兼容现有调用方和测试注入；
@@ -40,6 +42,7 @@ class TalentSearchService:
             milvus_client=milvus_client,
         )
         self.reranker = reranker or build_reranker()
+        self.candidate_policy = candidate_policy
 
     async def search(
         self,
@@ -201,25 +204,10 @@ class TalentSearchService:
         position_id: str | None,
         status: CandidateStatusEnum | None,
     ) -> str:
-        """构造 Milvus 标量过滤表达式。"""
+        """委托候选人策略构造 Milvus 标量过滤表达式。"""
 
-        filters = []
-
-        if not current_user.is_superuser:
-            if current_user.is_hr:
-                managed_department_ids = [
-                    d.id for d in getattr(current_user, "managed_departments", []) or []
-                ]
-                if managed_department_ids:
-                    quoted_ids = ", ".join(f'"{department_id}"' for department_id in managed_department_ids)
-                    filters.append(f"department_id in [{quoted_ids}]")
-            else:
-                filters.append(f'creator_id == "{current_user.id}"')
-
-        if position_id:
-            filters.append(f'position_id == "{position_id}"')
-
-        if status:
-            filters.append(f'status == "{status.value}"')
-
-        return " and ".join(filters)
+        return self.candidate_policy.build_milvus_filter(
+            actor=current_user,
+            position_id=position_id,
+            status=status,
+        )

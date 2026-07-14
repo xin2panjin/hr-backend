@@ -71,6 +71,9 @@ class CandidateStatusUpdateSchema(BaseModel):
 
 class CandidateListSchema(BaseModel):
     candidates: list[CandidateSchema]
+    total: int = Field(..., description="符合条件的候选人总数")
+    page: int = Field(..., description="当前页码")
+    size: int = Field(..., description="每页数量")
 
 class CandidateAIScoreSchema(BaseModel):
     id: str

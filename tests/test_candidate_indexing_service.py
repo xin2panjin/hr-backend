@@ -14,7 +14,10 @@ class FakeCandidateRepo:
             position_id="position-1",
             creator_id="creator-1",
             status=CandidateStatusEnum.APPLICATION,
-            position=SimpleNamespace(department_id="department-1"),
+            position=SimpleNamespace(
+                department_id="department-1",
+                creator_id="position-creator-1",
+            ),
         )
 
 
@@ -96,3 +99,4 @@ async def test_consume_pending_events_upserts_to_milvus():
     assert outbox_repo.failed == []
     assert len(milvus_client.upserts) == 1
     assert profile_repo.indexed[0]["candidate_id"] == "candidate-1"
+    assert milvus_client.upserts[0][1][0]["creator_id"] == "position-creator-1"

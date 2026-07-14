@@ -4,17 +4,22 @@ import pytest
 from fastapi import HTTPException
 
 from core.cache import TaskInfoSchema
+from schemas.cache_schema import ResumeParseTaskOwnerSchema
 from schemas.agent_schema import AgentCandidateSchema
 from services.resume_service import ResumeService
 
 
 class FakeResumeRepo:
-    def __init__(self):
+    def __init__(self, resume=None):
         self.created_resumes = []
+        self.resume = resume
 
     async def create_resume(self, file_path: str, uploader_id: str):
         self.created_resumes.append((file_path, uploader_id))
         return SimpleNamespace(id="resume-1", file_path=file_path, uploader_id=uploader_id)
+
+    async def get_by_id(self, resume_id: str):
+        return self.resume
 
 
 class FakeUploadFile:
@@ -48,11 +53,21 @@ class FailingConverter(FakeConverter):
 
 
 class FakeCache:
-    def __init__(self, task_info=None):
+    def __init__(self, task_info=None, task_owner=None):
         self.task_info = task_info
+        self.task_owner = task_owner
 
     async def get_task_info(self, task_id: str):
         return self.task_info
+
+    async def set_task_info(self, task_info: TaskInfoSchema):
+        self.task_info = task_info
+
+    async def get_resume_parse_task_owner(self, task_id: str):
+        return self.task_owner
+
+    async def set_resume_parse_task_owner(self, task_owner: ResumeParseTaskOwnerSchema):
+        self.task_owner = task_owner
 
 
 def build_user(user_id="user-1"):
@@ -163,10 +178,17 @@ async def test_get_parse_task_info_returns_cached_task():
     service = ResumeService(
         session=None,
         resume_repo=FakeResumeRepo(),
-        cache=FakeCache(task_info),
+        cache=FakeCache(
+            task_info,
+            ResumeParseTaskOwnerSchema(
+                task_id="task-1",
+                owner_id="user-1",
+                resume_id="resume-1",
+            ),
+        ),
     )
 
-    assert await service.get_parse_task_info("task-1") == task_info
+    assert await service.get_parse_task_info("task-1", build_user()) == task_info
 
 
 @pytest.mark.asyncio
@@ -178,6 +200,74 @@ async def test_get_parse_task_info_raises_404_when_missing():
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await service.get_parse_task_info("missing-task")
+        await service.get_parse_task_info("missing-task", build_user())
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_parse_task_records_owner_before_background_execution():
+    resume = SimpleNamespace(id="resume-1", uploader_id="user-1")
+    cache = FakeCache()
+    service = ResumeService(
+        session=None,
+        resume_repo=FakeResumeRepo(resume),
+        cache=cache,
+        task_id_factory=lambda: "task-1",
+    )
+
+    task_id = await service.create_parse_task(
+        resume_id="resume-1",
+        current_user=build_user("user-1"),
+    )
+
+    assert task_id == "task-1"
+    assert cache.task_info == TaskInfoSchema(task_id="task-1", status="pending")
+    assert cache.task_owner == ResumeParseTaskOwnerSchema(
+        task_id="task-1",
+        owner_id="user-1",
+        resume_id="resume-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_parse_task_rejects_non_owner():
+    resume = SimpleNamespace(id="resume-1", uploader_id="user-1")
+    cache = FakeCache()
+    service = ResumeService(
+        session=None,
+        resume_repo=FakeResumeRepo(resume),
+        cache=cache,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.create_parse_task(
+            resume_id="resume-1",
+            current_user=build_user("user-2"),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert cache.task_info is None
+    assert cache.task_owner is None
+
+
+@pytest.mark.asyncio
+async def test_get_parse_task_info_rejects_non_owner():
+    task_info = TaskInfoSchema(task_id="task-1", status="pending")
+    service = ResumeService(
+        session=None,
+        resume_repo=FakeResumeRepo(),
+        cache=FakeCache(
+            task_info,
+            ResumeParseTaskOwnerSchema(
+                task_id="task-1",
+                owner_id="user-1",
+                resume_id="resume-1",
+            ),
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_parse_task_info("task-1", build_user("user-2"))
+
+    assert exc_info.value.status_code == 403

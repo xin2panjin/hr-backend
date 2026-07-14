@@ -9,10 +9,12 @@ from loguru import logger
 from core.cache import HRCache
 from core.pdf import WordToPdfConverter
 from models import AsyncSession
+from models.candidate import ResumeModel
 from models.user import UserModel
 from repository.candidate_repo import ResumeRepo
-from schemas.cache_schema import TaskInfoSchema
+from schemas.cache_schema import ResumeParseTaskOwnerSchema, TaskInfoSchema
 from settings import settings
+from iam.policies.resume_policy import ResumePolicy
 
 
 class ResumeService:
@@ -64,13 +66,55 @@ class ResumeService:
     def create_parse_task_id(self) -> str:
         return str(self.task_id_factory())
 
-    async def get_parse_task_info(self, task_id: str) -> TaskInfoSchema:
+    async def create_parse_task(
+        self,
+        *,
+        resume_id: str,
+        current_user: UserModel,
+    ) -> str:
+        """校验简历归属后创建可追溯的解析任务。"""
+
+        if self.resume_repo is None:
+            raise RuntimeError("resume_repo is required to create a parse task")
+
+        resume: ResumeModel | None = await self.resume_repo.get_by_id(resume_id)
+        if not resume:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="简历不存在")
+        ResumePolicy.ensure_can_parse(current_user, resume)
+
+        if self.cache is None:
+            self.cache = HRCache()
+
+        task_id = self.create_parse_task_id()
+        # 先写入 pending 和归属信息，再提交 BackgroundTask，避免任务执行过快时
+        # 查询接口看不到任务或无法判断任务归属。
+        await self.cache.set_task_info(TaskInfoSchema(task_id=task_id, status="pending"))
+        await self.cache.set_resume_parse_task_owner(
+            ResumeParseTaskOwnerSchema(
+                task_id=task_id,
+                owner_id=current_user.id,
+                resume_id=resume.id,
+            )
+        )
+        return task_id
+
+    async def get_parse_task_info(
+        self,
+        task_id: str,
+        current_user: UserModel,
+    ) -> TaskInfoSchema:
         if self.cache is None:
             self.cache = HRCache()
 
         task_info = await self.cache.get_task_info(task_id)
         if not task_info:
             raise HTTPException(status_code=404, detail="任务不存在或已过期")
+
+        task_owner = await self.cache.get_resume_parse_task_owner(task_id)
+        # 旧任务或异常任务没有归属记录时，默认拒绝读取，不能把 task_id 当成凭证。
+        if not task_owner:
+            raise HTTPException(status_code=404, detail="任务不存在或已过期")
+        ResumePolicy.ensure_can_read_task(current_user, task_owner.owner_id)
         return task_info
 
     def _validate_upload_file(self, file: UploadFile) -> None:

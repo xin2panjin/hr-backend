@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Query
 
 from core.cache import HRCache
@@ -12,9 +14,10 @@ from tasks.candidate_index_tasks import sync_candidate_index_batch_task
 from tasks.resume_tasks import ocr_parse_resume_task
 from schemas.candidate_schema import CandidateListSchema
 from models.candidate import CandidateStatusEnum
-from repository.candidate_repo import CandidateAIScoreRepo
 from services.candidate_service import CandidateService
 from services.resume_service import ResumeService
+from iam.policies.candidate_policy import CandidatePolicy
+from iam.permissions import PermissionCode
 
 # uv add aiofiles
 
@@ -43,11 +46,16 @@ async def resume_upload(
 async def parse_resume(
     resume_data: ResumePaseSchema,
     background_tasks: BackgroundTasks,
-    _: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session_instance),
+    cache: HRCache = Depends(get_cache_instance),
+    current_user: UserModel = Depends(get_current_user),
 ):
-    # 创建一个识别简历的后台任务
-    resume_service = ResumeService()
-    task_id = resume_service.create_parse_task_id()
+    # 创建任务前校验简历上传者，并持久化任务归属，避免 resume_id 或 task_id 越权。
+    resume_service = ResumeService(session=session, cache=cache)
+    task_id = await resume_service.create_parse_task(
+        resume_id=resume_data.resume_id,
+        current_user=current_user,
+    )
     background_tasks.add_task(ocr_parse_resume_task, resume_id=resume_data.resume_id, task_id=task_id)
     return {"task_id": task_id}
 
@@ -55,10 +63,10 @@ async def parse_resume(
 async def get_task_status(
     task_id: str,
     cache: HRCache = Depends(get_cache_instance),
-    _: UserModel = Depends(get_current_user)
+    current_user: UserModel = Depends(get_current_user),
 ):
     resume_service = ResumeService(cache=cache)
-    task_info = await resume_service.get_parse_task_info(task_id)
+    task_info = await resume_service.get_parse_task_info(task_id, current_user)
     return task_info.model_dump()
 
 @router.post("/create", summary="创建候选人", response_model=ResponseSchema)
@@ -92,19 +100,29 @@ async def get_candidate_list(
     size: int = Query(10, description="每页的数量"),
     position_id: str|None = Query(None, description="职位的ID"),
     status: CandidateStatusEnum|None = Query(None, description="候选人状态"),
+    keyword: str | None = Query(None, max_length=100, description="按姓名、邮箱或手机号搜索"),
+    creator_id: str | None = Query(None, description="推荐人/创建人ID"),
+    created_at_start: datetime | None = Query(None, description="创建时间起始"),
+    created_at_end: datetime | None = Query(None, description="创建时间结束"),
     session: AsyncSession = Depends(get_session_instance),
     current_user: UserModel = Depends(get_current_user),
 ):
+    if created_at_start and created_at_end and created_at_start > created_at_end:
+        raise HTTPException(status_code=422, detail="创建时间起始不能晚于结束")
     async with session.begin():
         candidate_repo = CandidateRepo(session=session)
-        candidates = await candidate_repo.get_list(
+        candidates, total = await candidate_repo.get_list(
             current_user=current_user,
             position_id=position_id,
             status=status,
+            keyword=keyword,
+            creator_id=creator_id,
+            created_at_start=created_at_start,
+            created_at_end=created_at_end,
             page=page,
             size=size,
         )
-        return {"candidates": candidates}
+        return {"candidates": candidates, "total": total, "page": page, "size": size}
 
 @router.patch("/{candidate_id}/status", summary="更新候选人状态", response_model=ResponseSchema)
 async def update_candidate_status(
@@ -129,11 +147,13 @@ async def update_candidate_status(
 async def get_candidate_ai_score(
     candidate_id: str,
     session: AsyncSession = Depends(get_session_instance),
-    _: UserModel = Depends(get_current_user),
+    current_user: UserModel = Depends(get_current_user),
 ):
     async with session.begin():
-        score_repo = CandidateAIScoreRepo(session)
-        ai_score = await score_repo.get_by_candidate_id(candidate_id)
-        if not ai_score:
-            raise HTTPException(status_code=400, detail="候选人的AI评分不存在！")
-        return {"ai_score": ai_score}
+        candidate = await CandidateRepo(session).get_by_id(candidate_id)
+        # 对读取接口不暴露未授权候选人是否存在，避免通过候选人 ID 枚举数据。
+        if not candidate or not CandidatePolicy.can_read(current_user, candidate):
+            raise HTTPException(status_code=404, detail="候选人不存在或无权访问！")
+        if not candidate.ai_score:
+            raise HTTPException(status_code=404, detail="候选人的AI评分不存在！")
+        return {"ai_score": candidate.ai_score}

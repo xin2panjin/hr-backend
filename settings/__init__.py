@@ -105,10 +105,12 @@ class Settings(BaseSettings):
     DB_AGENT_NAME: str = Field("hr_system_agent", validation_alias="DB_AGENT_NAME")
 
     JWT_SECRET_KEY: str = Field(..., validation_alias="JWT_SECRET_KEY")
-    # Token 过期时间使用天数配置，方便不同环境按安全要求调整
-    JWT_ACCESS_TOKEN_EXPIRES_DAYS: int = Field(
-        7,
-        validation_alias="JWT_ACCESS_TOKEN_EXPIRES_DAYS",
+    # Access Token 必须短生命周期；Refresh Token 仍以天为单位管理。
+    JWT_ACCESS_TOKEN_EXPIRES_MINUTES: int = Field(
+        30,
+        ge=5,
+        le=120,
+        validation_alias="JWT_ACCESS_TOKEN_EXPIRES_MINUTES",
     )
     JWT_REFRESH_TOKEN_EXPIRES_DAYS: int = Field(
         30,
@@ -292,9 +294,9 @@ class Settings(BaseSettings):
 
     @property
     def JWT_ACCESS_TOKEN_EXPIRES(self) -> timedelta:
-        """兼容原有调用方：返回 access token 的 timedelta 过期时间。"""
+        """返回短生命周期 access token 的有效期。"""
 
-        return timedelta(days=self.JWT_ACCESS_TOKEN_EXPIRES_DAYS)
+        return timedelta(minutes=self.JWT_ACCESS_TOKEN_EXPIRES_MINUTES)
 
     @property
     def JWT_REFRESH_TOKEN_EXPIRES(self) -> timedelta:

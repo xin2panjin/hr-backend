@@ -6,7 +6,8 @@ LangGraph thread，而是统一复用会话服务，避免旧、新接口产生�
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from dependencies import get_hr_assistant_user
+from dependencies import require_permission
+from iam.permissions import PermissionCode
 from models.user import UserModel
 from schemas.hr_assistant_schema import (
     HRAssistantChatReqSchema,
@@ -50,7 +51,7 @@ def _extract_hr_assistant_artifacts(messages):
 @router.post("/chat", summary="HR招聘助手对话（兼容旧接口）", response_model=HRAssistantChatRespSchema)
 async def chat_with_hr_assistant(
     chat_data: HRAssistantChatReqSchema,
-    current_user: UserModel = Depends(get_hr_assistant_user),
+    current_user: UserModel = Depends(require_permission(PermissionCode.ASSISTANT_USE)),
 ):
     """兼容旧页面；未传会话 ID 时自动创建一条业务会话。"""
 

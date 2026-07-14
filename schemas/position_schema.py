@@ -35,3 +35,6 @@ class PositionRespSchema(BaseModel):
 
 class PositionListRespSchema(BaseModel):
     positions: List[PositionSchema]
+    total: int = Field(..., description="符合条件的职位总数")
+    page: int = Field(..., description="当前页码")
+    size: int = Field(..., description="每页数量")

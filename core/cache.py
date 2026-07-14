@@ -3,7 +3,12 @@ from threading import Lock
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from settings import settings
-from schemas.cache_schema import InviteInfoSchema, DingTalkTokenInfoSchema, TaskInfoSchema
+from schemas.cache_schema import (
+    DingTalkTokenInfoSchema,
+    InviteInfoSchema,
+    ResumeParseTaskOwnerSchema,
+    TaskInfoSchema,
+)
 
 class _CacheSingletonMeta(type):
     """仅供 HRCache 使用的线程安全单例元类。"""
@@ -22,6 +27,7 @@ class HRCache(metaclass=_CacheSingletonMeta):
     invite_prefix = "invite:"
     dingtalk_prefix = "dingtalk:"
     task_prefix = "task:"
+    resume_parse_task_owner_prefix = "resume-parse-task-owner:"
     email_last_uid_key = "email:last_uid"
 
     def __init__(self):
@@ -70,6 +76,29 @@ class HRCache(metaclass=_CacheSingletonMeta):
         if task_json is not None:
             task_info = TaskInfoSchema.model_validate_json(task_json)
             return task_info
+        return None
+
+    async def set_resume_parse_task_owner(
+        self,
+        task_owner: ResumeParseTaskOwnerSchema,
+    ) -> None:
+        """保存解析任务归属，供查询接口执行对象级授权。"""
+
+        key = f"{self.resume_parse_task_owner_prefix}{task_owner.task_id}"
+        await self.set(
+            key,
+            task_owner.model_dump_json(),
+            ex=60 * 60,
+        )
+
+    async def get_resume_parse_task_owner(
+        self,
+        task_id: str,
+    ) -> ResumeParseTaskOwnerSchema | None:
+        key = f"{self.resume_parse_task_owner_prefix}{task_id}"
+        task_owner_json = await self.get(key)
+        if task_owner_json is not None:
+            return ResumeParseTaskOwnerSchema.model_validate_json(task_owner_json)
         return None
 
     async def set_email_last_uid(self, last_uid: int, *, ex: int | None = None) -> None:

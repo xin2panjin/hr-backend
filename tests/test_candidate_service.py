@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from models.candidate import CandidateStatusEnum, GenderEnum
 from models.positions import EducationEnum
 from models.user import UserStatus
+from iam.permissions import RoleCode
 from schemas.candidate_schema import CandidateCreateSchema, CandidateStatusUpdateSchema
 from services.candidate_service import CandidateService
 
@@ -32,6 +33,22 @@ class FakeCandidateRepo:
         self.status_updates.append((candidate_id, status))
 
 
+class FakePositionRepo:
+    def __init__(self, position):
+        self.position = position
+
+    async def get_by_id(self, position_id):
+        return self.position
+
+
+class FakeResumeRepo:
+    def __init__(self, resume):
+        self.resume = resume
+
+    async def get_by_id(self, resume_id):
+        return self.resume
+
+
 class FakeInterviewService:
     def __init__(self):
         self.waiting_calls = []
@@ -54,6 +71,7 @@ class FakeSearchProfileService:
     async def rebuild_candidate_profile(self, candidate):
         self.rebuild_calls.append(candidate)
 
+
 def build_user(user_id="user-1"):
     department = SimpleNamespace(
         id="department-1",
@@ -69,8 +87,7 @@ def build_user(user_id="user-1"):
         avatar=None,
         department=department,
         status=UserStatus.ACTIVE,
-        is_superuser=False,
-        is_hr=False,
+        iam_roles=[SimpleNamespace(role=SimpleNamespace(code=RoleCode.HIRING_MANAGER.value), scopes=[])],
         created_at=datetime(2026, 1, 1, 9, 0, 0),
     )
 
@@ -127,13 +144,17 @@ def build_candidate(candidate_id, status):
 async def test_create_candidate_adds_creator_and_returns_candidate_id():
     candidate_repo = FakeCandidateRepo()
     search_profile_service = FakeSearchProfileService()
+    current_user = build_user("creator-1")
+    position = build_position(current_user)
+    resume = SimpleNamespace(id="resume-1", uploader_id=current_user.id)
     service = CandidateService(
         session=None,
         candidate_repo=candidate_repo,
+        position_repo=FakePositionRepo(position),
+        resume_repo=FakeResumeRepo(resume),
         interview_service=FakeInterviewService(),
         search_profile_service=search_profile_service,
     )
-    current_user = build_user("creator-1")
     candidate_data = CandidateCreateSchema(
         name="候选人",
         email="candidate@example.com",
@@ -146,6 +167,63 @@ async def test_create_candidate_adds_creator_and_returns_candidate_id():
     assert candidate_repo.created_candidate_info["creator_id"] == "creator-1"
     assert candidate_id == "candidate-1"
     assert search_profile_service.rebuild_calls == [candidate_repo.candidate]
+
+
+@pytest.mark.asyncio
+async def test_create_candidate_rejects_position_outside_actor_scope():
+    candidate_repo = FakeCandidateRepo()
+    actor = build_user("manager-2")
+    position = build_position(build_user("manager-1"))
+    service = CandidateService(
+        session=None,
+        candidate_repo=candidate_repo,
+        position_repo=FakePositionRepo(position),
+        resume_repo=FakeResumeRepo(SimpleNamespace(id="resume-1", uploader_id=actor.id)),
+        interview_service=FakeInterviewService(),
+        search_profile_service=FakeSearchProfileService(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.create_candidate(
+            CandidateCreateSchema(
+                name="候选人",
+                email="candidate@example.com",
+                position_id="position-1",
+                resume_id="resume-1",
+            ),
+            actor,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert candidate_repo.created_candidate_info is None
+
+
+@pytest.mark.asyncio
+async def test_create_candidate_rejects_resume_owned_by_another_user():
+    candidate_repo = FakeCandidateRepo()
+    actor = build_user("manager-1")
+    service = CandidateService(
+        session=None,
+        candidate_repo=candidate_repo,
+        position_repo=FakePositionRepo(build_position(actor)),
+        resume_repo=FakeResumeRepo(SimpleNamespace(id="resume-1", uploader_id="user-2")),
+        interview_service=FakeInterviewService(),
+        search_profile_service=FakeSearchProfileService(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.create_candidate(
+            CandidateCreateSchema(
+                name="候选人",
+                email="candidate@example.com",
+                position_id="position-1",
+                resume_id="resume-1",
+            ),
+            actor,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert candidate_repo.created_candidate_info is None
 
 
 @pytest.mark.asyncio

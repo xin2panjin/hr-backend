@@ -1,8 +1,9 @@
 import enum
+from datetime import datetime
 from typing import List, Optional
 from pwdlib import PasswordHash
 
-from sqlalchemy import String, Boolean, Enum as SEnum, ForeignKey, Table, Column, Integer
+from sqlalchemy import String, Enum as SEnum, ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from . import BaseModel, Base
@@ -16,13 +17,11 @@ class UserStatus(enum.Enum):
     RESIGNED = "RESIGNED"
 
 
-# 关联表：HR管理的部门
-hr_managed_departments = Table(
-    "hr_managed_departments",
-    Base.metadata,
-    Column("user_id", ForeignKey("users.id"), primary_key=True),
-    Column("department_id", ForeignKey("departments.id"), primary_key=True),
-)
+class DepartmentStatus(str, enum.Enum):
+    """组织部门的生命周期状态。"""
+
+    ACTIVE = "ACTIVE"
+    ARCHIVED = "ARCHIVED"
 
 
 class UserModel(BaseModel):
@@ -36,13 +35,13 @@ class UserModel(BaseModel):
     avatar: Mapped[Optional[str]] = mapped_column(String(255))
     department_id: Mapped[Optional[str]] = mapped_column(ForeignKey("departments.id"))
     status: Mapped[UserStatus] = mapped_column(SEnum(UserStatus), default=UserStatus.ACTIVE)
-    is_hr: Mapped[bool] = mapped_column(Boolean, default=False)
-    is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 角色、范围或账号状态变更时递增，后续会话校验以此实现即时失效。
+    authz_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column()
+    disabled_at: Mapped[Optional[datetime]] = mapped_column()
+    disabled_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"))
 
     department: Mapped[Optional["DepartmentModel"]] = relationship(back_populates="members", foreign_keys=[department_id], lazy="joined")
-    managed_departments: Mapped[List["DepartmentModel"]] = relationship(
-        secondary=hr_managed_departments, back_populates="managing_hrs"
-    )
     dingding_user: Mapped["DingdingUserModel"] = relationship(back_populates="user", uselist=False)
 
     def __init__(self, **kwargs):
@@ -66,11 +65,21 @@ class UserModel(BaseModel):
 class DepartmentModel(BaseModel):
     __tablename__ = "departments"
 
+    # code 是稳定机器标识；名称可修改，仍保持全局唯一以兼容当前组织模型。
+    code: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(255))
-    members: Mapped[List["UserModel"]] = relationship(back_populates="department")
-    managing_hrs: Mapped[List["UserModel"]] = relationship(
-        secondary=hr_managed_departments, back_populates="managed_departments"
+    status: Mapped[DepartmentStatus] = mapped_column(
+        SEnum(DepartmentStatus, values_callable=lambda obj: [item.value for item in obj]),
+        default=DepartmentStatus.ACTIVE,
+        nullable=False,
+    )
+    parent_id: Mapped[Optional[str]] = mapped_column(ForeignKey("departments.id"))
+    archived_at: Mapped[Optional[datetime]] = mapped_column()
+    archived_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"))
+    members: Mapped[List["UserModel"]] = relationship(
+        back_populates="department",
+        foreign_keys="UserModel.department_id",
     )
 
 

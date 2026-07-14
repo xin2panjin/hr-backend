@@ -82,6 +82,9 @@ class CandidateIndexingService:
 
         position = candidate.position
         department_id = position.department_id if position else ""
+        # 检索权限对普通用户按“职位创建人”判断，Milvus 元数据必须与
+        # PostgreSQL CandidatePolicy 使用同一归属字段。
+        position_creator_id = getattr(position, "creator_id", "") if position else ""
 
         self.milvus_client.upsert(
             collection_name=settings.MILVUS_CANDIDATE_COLLECTION,
@@ -92,7 +95,7 @@ class CandidateIndexingService:
                     "dense_vector": vector,
                     "department_id": department_id or "",
                     "position_id": candidate.position_id or "",
-                    "creator_id": candidate.creator_id or "",
+                    "creator_id": position_creator_id or "",
                     "status": candidate.status.value if candidate.status else "",
                     "profile_version": profile.profile_version,
                     "embedding_model": self.embedding_service.model,
