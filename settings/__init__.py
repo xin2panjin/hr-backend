@@ -168,6 +168,11 @@ class Settings(BaseSettings):
         "candidate_profiles",
         validation_alias="MILVUS_CANDIDATE_COLLECTION",
     )
+    # 企业制度知识库的 Collection 由后端知识库定义引用；修改名称相当于切换索引版本。
+    MILVUS_RECRUITING_POLICY_COLLECTION: str = Field(
+        "recruiting_policy_chunks_v1",
+        validation_alias="MILVUS_RECRUITING_POLICY_COLLECTION",
+    )
 
     # 人才库检索模式：只影响 Milvus 的召回方式，不改变后续 SQL 权限复核。
     TALENT_SEARCH_RETRIEVAL_MODE: Literal["dense", "sparse", "hybrid"] = Field(
@@ -239,11 +244,23 @@ class Settings(BaseSettings):
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
         validation_alias="EMBEDDING_BASE_URL",
     )
+    # DashScope text-embedding-v* 单次请求条数上限为 10；其他供应商可调大。
+    EMBEDDING_BATCH_SIZE: int = Field(
+        10,
+        ge=1,
+        le=100,
+        validation_alias="EMBEDDING_BATCH_SIZE",
+    )
 
     # 候选人画像向量维度，必须和后续 Embedding 模型输出维度一致
     MILVUS_CANDIDATE_VECTOR_DIM: int = Field(
         1024,
         validation_alias="MILVUS_CANDIDATE_VECTOR_DIM",
+    )
+    # 通用知识库的稠密向量维度，必须与当前 Embedding 模型输出维度一致。
+    MILVUS_KNOWLEDGE_VECTOR_DIM: int = Field(
+        1024,
+        validation_alias="MILVUS_KNOWLEDGE_VECTOR_DIM",
     )
 
     # 前端和后端的域名
@@ -253,6 +270,18 @@ class Settings(BaseSettings):
     RESUME_DIR: str = Field(
         os.path.join(BASE_DIR, "upload"),
         validation_alias="RESUME_DIR",
+    )
+    # 知识库原始文件的根目录。数据库只保存相对于该目录的 storage_path，
+    # 方便未来无缝替换为对象存储实现。
+    KNOWLEDGE_DOCUMENT_DIR: str = Field(
+        os.path.join(BASE_DIR, "upload", "knowledge"),
+        validation_alias="KNOWLEDGE_DOCUMENT_DIR",
+    )
+    KNOWLEDGE_DOCUMENT_MAX_FILE_SIZE_MB: int = Field(
+        20,
+        ge=1,
+        le=100,
+        validation_alias="KNOWLEDGE_DOCUMENT_MAX_FILE_SIZE_MB",
     )
 
     # Paddle OCR Access Token

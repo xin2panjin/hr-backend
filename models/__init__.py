@@ -68,4 +68,6 @@ from . import candidate
 from . import candidate_search
 from . import candidate_agent
 from . import assistant_conversation
+from . import candidate_communication
+from . import knowledge
 from . import iam

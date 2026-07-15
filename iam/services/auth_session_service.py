@@ -18,6 +18,10 @@ class SessionValidationError(ValueError):
     pass
 
 
+class PasswordChangeError(ValueError):
+    pass
+
+
 class AuthSessionService:
     def __init__(self, session, auth_handler: AuthHandler | None = None):
         self.session = session
@@ -140,6 +144,25 @@ class AuthSessionService:
         user.authz_version += 1
         await self.revoke_user_sessions(user_id=user.id, reason="password_reset", actor_id=actor_id)
         self._audit(actor_id=actor_id, action="user.password.reset", target_id=user.id)
+
+    async def change_my_password(
+        self,
+        *,
+        user: UserModel,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        """校验当前密码后更新，并撤销该账号全部既有会话。"""
+        if not user.check_password(current_password):
+            raise PasswordChangeError("当前密码不正确")
+        if user.check_password(new_password):
+            raise PasswordChangeError("新密码不能与当前密码相同")
+
+        validate_password(new_password, username=user.username, email=user.email)
+        user.password = new_password
+        user.authz_version += 1
+        await self.revoke_user_sessions(user_id=user.id, reason="password_changed", actor_id=user.id)
+        self._audit(actor_id=user.id, action="user.password.change", target_id=user.id)
 
     def _audit(self, *, actor_id: str | None, action: str, target_id: str, after_data=None) -> None:
         self.session.add(AuditLogModel(actor_id=actor_id, action=action, target_type="auth_session", target_id=target_id, after_data=after_data))

@@ -1,6 +1,12 @@
 from agents.hr_assistant.tools.talent_search import _parse_status
 from agents.hr_assistant.tools.candidate_detail import _build_candidate_detail
 from agents.hr_assistant.tools.candidate_compare import _build_candidate_compare_payload
+from agents.hr_assistant.tools.knowledge_search import (
+    _build_knowledge_sources_payload,
+    _load_authorized_user,
+    search_recruiting_knowledge,
+)
+from agents.hr_assistant.tools import HR_ASSISTANT_TOOLS
 from routers.hr_assistant_router import (
     _extract_hr_assistant_artifacts,
     _get_current_turn_messages,
@@ -8,6 +14,7 @@ from routers.hr_assistant_router import (
 from models.candidate import CandidateStatusEnum
 from types import SimpleNamespace
 import json
+import pytest
 
 
 def test_parse_status_by_value():
@@ -20,6 +27,79 @@ def test_parse_status_by_name():
 
 def test_parse_status_unknown_returns_none():
     assert _parse_status("不存在的状态") is None
+
+
+def test_knowledge_search_tool_is_registered_and_serializes_sources():
+    assert any(tool.name == "search_recruiting_knowledge" for tool in HR_ASSISTANT_TOOLS)
+    source = type("Source", (), {"to_dict": lambda self: {"source_id": "chunk-1"}})()
+    result = type(
+        "SearchResult",
+        (),
+        {
+            "knowledge_base_key": "recruiting_policy",
+            "retrieval_mode": type("Mode", (), {"value": "hybrid"})(),
+            "trace_id": "trace-1",
+            "sources": [source],
+        },
+    )()
+
+    payload = _build_knowledge_sources_payload(result)
+
+    assert payload["artifact_type"] == "knowledge_sources"
+    assert payload["count"] == 1
+    assert payload["sources"] == [{"source_id": "chunk-1"}]
+
+
+@pytest.mark.asyncio
+async def test_knowledge_search_tool_validates_input_before_accessing_database():
+    class Runtime:
+        state = {"current_user_id": "user-1"}
+
+    result = await search_recruiting_knowledge.coroutine(
+        query="年假",
+        runtime=Runtime(),
+        top_k=0,
+    )
+
+    assert "1 到 20" in result
+
+
+@pytest.mark.asyncio
+async def test_knowledge_search_permission_check_rejects_user_without_assistant_access():
+    class FakeUserRepo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_by_id(self, user_id):
+            return SimpleNamespace(id=user_id)
+
+    class FakeIamRepo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_active_user_roles(self, user_id):
+            return [
+                SimpleNamespace(
+                    role=SimpleNamespace(
+                        permissions=[SimpleNamespace(code="candidate.read")]
+                    )
+                )
+            ]
+
+    import agents.hr_assistant.tools.knowledge_search as knowledge_tool_module
+
+    original_user_repo = knowledge_tool_module.UserRepo
+    original_iam_repo = knowledge_tool_module.IamRepo
+    knowledge_tool_module.UserRepo = FakeUserRepo
+    knowledge_tool_module.IamRepo = FakeIamRepo
+    try:
+        user, error = await _load_authorized_user(object(), "employee-1")
+    finally:
+        knowledge_tool_module.UserRepo = original_user_repo
+        knowledge_tool_module.IamRepo = original_iam_repo
+
+    assert user is None
+    assert error == "当前用户没有使用企业制度知识库的权限。"
 
 def test_build_candidate_detail_hides_sensitive_fields():
     candidate = SimpleNamespace(
@@ -130,6 +210,41 @@ def test_extract_artifacts_from_search_tool_message():
         "label": "查看详情",
         "candidate_id": "candidate-1",
     }
+
+
+def test_extract_artifacts_from_knowledge_search_tool_message():
+    message = SimpleNamespace(
+        type="tool",
+        content=json.dumps(
+            {
+                "artifact_type": "knowledge_sources",
+                "knowledge_base_key": "recruiting_policy",
+                "trace_id": "trace-1",
+                "sources": [
+                    {
+                        "source_id": "chunk-1",
+                        "document_id": "doc-1",
+                        "title": "员工休假管理制度",
+                        "version": "V2",
+                        "section_path": "第三章 > 年假",
+                        "page_number": 5,
+                        "page_end": 6,
+                        "score": 0.9,
+                        "content": "年假规则正文",
+                        "chunk_ids": ["chunk-1", "chunk-2"],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+    )
+
+    artifacts = _extract_hr_assistant_artifacts([message])
+
+    assert len(artifacts) == 1
+    assert artifacts[0]["type"] == "knowledge_sources"
+    assert artifacts[0]["sources"][0]["section_path"] == "第三章 > 年假"
+    assert artifacts[0]["sources"][0]["page_end"] == 6
 
 def test_extract_artifacts_from_candidate_detail_tool_message():
     message = SimpleNamespace(

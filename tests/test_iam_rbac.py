@@ -52,7 +52,12 @@ def test_iam_migration_follows_current_alembic_head():
         permission.value
         for permission in PermissionCode
         if permission
-        not in {PermissionCode.AUDIT_READ, PermissionCode.ROLE_UPDATE_PERMISSIONS}
+        not in {
+            PermissionCode.AUDIT_READ,
+            PermissionCode.ROLE_UPDATE_PERMISSIONS,
+                PermissionCode.KNOWLEDGE_DOCUMENT_MANAGE,
+                PermissionCode.CANDIDATE_COMMUNICATION_USE,
+        }
     }
     assert set(migration.ROLE_DEFINITIONS) == {role.value for role in RoleCode}
     assert set(migration.ROLE_PERMISSIONS["ROLE_SYSTEM_ADMIN"]) == set(migration.PERMISSIONS)

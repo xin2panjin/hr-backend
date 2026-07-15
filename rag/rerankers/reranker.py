@@ -1,4 +1,4 @@
-"""候选人检索的专用 Rerank 实现。"""
+"""可复用的专用 Rerank 实现。"""
 
 from abc import ABC, abstractmethod
 from dataclasses import replace
@@ -9,21 +9,21 @@ from urllib.parse import urlsplit
 import httpx
 from loguru import logger
 
-from rag.retrieval_types import RetrievalHit
+from rag.retrieval_types import SearchHit
 from settings import settings
 
 
 class Reranker(Protocol):
-    """对已召回的候选人命中结果进行二次排序。"""
+    """对已召回的通用实体命中结果进行二次排序。"""
 
     async def rerank(
         self,
         *,
         query: str,
-        hits: list[RetrievalHit],
+        hits: list[SearchHit],
         trace_id: str | None = None,
-    ) -> list[RetrievalHit]:
-        """根据查询和候选人画像，返回新的命中排序。"""
+    ) -> list[SearchHit]:
+        """根据查询和命中文本，返回新的命中排序。"""
 
 
 class RerankAPIError(RuntimeError):
@@ -37,9 +37,9 @@ class NoopReranker:
         self,
         *,
         query: str,
-        hits: list[RetrievalHit],
+        hits: list[SearchHit],
         trace_id: str | None = None,
-    ) -> list[RetrievalHit]:
+    ) -> list[SearchHit]:
         """返回输入顺序的副本，保持调用链可替换。"""
 
         return list(hits)
@@ -55,6 +55,7 @@ class APIReranker(ABC):
         base_url: str | None = None,
         api_key: str | None = None,
         timeout_seconds: float | None = None,
+        max_text_chars: int | None = None,
         max_profile_chars: int | None = None,
         client: httpx.AsyncClient | None = None,
     ):
@@ -68,8 +69,12 @@ class APIReranker(ABC):
         self.timeout_seconds = (
             timeout_seconds or settings.TALENT_SEARCH_RERANK_TIMEOUT_SECONDS
         )
-        self.max_profile_chars = (
-            max_profile_chars or settings.TALENT_SEARCH_RERANK_MAX_PROFILE_CHARS
+        # max_profile_chars 是旧构造参数，保留它以兼容既有调用方；新业务
+        # 使用 max_text_chars，避免把候选人画像概念带入通用 RAG 内核。
+        self.max_text_chars = (
+            max_text_chars
+            or max_profile_chars
+            or settings.TALENT_SEARCH_RERANK_MAX_PROFILE_CHARS
         )
         self._client = client
 
@@ -77,10 +82,10 @@ class APIReranker(ABC):
         self,
         *,
         query: str,
-        hits: list[RetrievalHit],
+        hits: list[SearchHit],
         trace_id: str | None = None,
-    ) -> list[RetrievalHit]:
-        """调用专用模型，并将 API 相关性分数映射回候选人命中结果。"""
+    ) -> list[SearchHit]:
+        """调用专用模型，并将 API 相关性分数映射回通用命中结果。"""
 
         if len(hits) <= 1:
             logger.info(
@@ -96,16 +101,16 @@ class APIReranker(ABC):
 
         started_at = perf_counter()
         documents = [
-            (hit.profile_text or "")[: self.max_profile_chars] for hit in hits
+            (hit.text or "")[: self.max_text_chars] for hit in hits
         ]
         logger.info(
-            "Rerank 开始 trace_id={} protocol={} model={} api_host={} hit_count={} max_profile_chars={}",
+            "Rerank 开始 trace_id={} protocol={} model={} api_host={} hit_count={} max_text_chars={}",
             trace_id or "-",
             self.protocol_name,
             self.model,
             self._api_host,
             len(hits),
-            self.max_profile_chars,
+            self.max_text_chars,
         )
         try:
             body = await self._post(
@@ -199,11 +204,11 @@ class APIReranker(ABC):
     @staticmethod
     def _apply_results(
         results: list[dict[str, Any]],
-        hits: list[RetrievalHit],
-    ) -> list[RetrievalHit]:
+        hits: list[SearchHit],
+    ) -> list[SearchHit]:
         """校验 index 与 0 到 1 的相关性分数，保留缺失项的原始顺序。"""
 
-        scored_hits: list[tuple[RetrievalHit, float]] = []
+        scored_hits: list[tuple[SearchHit, float]] = []
         seen_indexes: set[int] = set()
         for item in results:
             try:

@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>候选人沟通与 HR 待办中心 - 前端交互原型</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Element Plus CSS CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <!-- Element Plus JS CDN -->
+  <script src="https://unpkg.com/element-plus"></script>
+  <!-- Element Plus Icons CDN -->
+  <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+  <style>
+    body {
+      background-color: #f5f7fb;
+      color: #1e293b;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .page-shell {
+      max-width: 1480px;
+      margin-left: auto;
+      margin-right: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .surface {
+      border-radius: 0.5rem;
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      background-color: #ffffff;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    }
+    .surface-header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      border-bottom: 1px solid #f1f5f9;
+      padding: 1rem 1.25rem;
+    }
+    @media (min-width: 768px) {
+      .surface-header {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+    }
+    .surface-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .surface-subtitle {
+      margin-top: 0.25rem;
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+    .stat-card {
+      border-radius: 0.5rem;
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      background-color: #ffffff;
+      padding: 1rem;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    }
+    .icon-tile {
+      display: flex;
+      height: 2.5rem;
+      width: 2.5rem;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0.5rem;
+      border: 1px solid #e2e8f0;
+      background-color: #f8fafc;
+      color: #475569;
+    }
+    .empty-hint {
+      border-radius: 0.5rem;
+      border: 1px dashed #cbd5e1;
+      background-color: #f8fafc;
+      padding: 2rem 1rem;
+      text-align: center;
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+    /* Highlight effect for evidence */
+    .message-highlight {
+      animation: highlight-pulse 1.5s ease-in-out infinite alternate;
+      border: 2px solid #3b82f6 !important;
+      background-color: #eff6ff !important;
+    }
+    @keyframes highlight-pulse {
+      0% { box-shadow: 0 0 0 0px rgba(59, 130, 246, 0.4); }
+      100% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.15); }
+    }
+    /* Custom scrollbar for chat */
+    .chat-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .chat-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    .chat-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="p-4 md:p-6">
+  <div id="app" v-cloak>
+    <!-- Top Global Header to toggle between Candidate and HR views -->
+    <header class="mb-6 flex flex-col md:flex-row items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      <div class="flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white font-bold text-lg">HR</div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-900">星澜智能招聘系统</h1>
+          <p class="text-xs text-slate-500">候选人沟通与 HR 待办中心原型 (v1.0)</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-2 bg-slate-200/60 p-1 rounded-lg">
+        <button 
+          type="button"
+          @click="globalView = 'candidate'"
+          :class="globalView === 'candidate' ? 'bg-white text-blue-600 font-semibold shadow-sm' : 'text-slate-600 hover:text-slate-900'"
+          class="px-4 py-1.5 rounded-md text-sm transition"
+        >
+          <el-icon class="align-middle mr-1"><User /></el-icon>候选人门户
+        </button>
+        <button 
+          type="button"
+          @click="globalView = 'hr'"
+          :class="globalView === 'hr' ? 'bg-white text-blue-600 font-semibold shadow-sm' : 'text-slate-600 hover:text-slate-900'"
+          class="px-4 py-1.5 rounded-md text-sm transition"
+        >
+          <el-icon class="align-middle mr-1"><Briefcase /></el-icon>HR 工作台
+        </button>
+      </div>
+    </header>
+
+    <!-- ========================================== -->
+    <!-- 1. CANDIDATE PORTAL (候选人端) -->
+    <!-- ========================================== -->
+    <div v-if="globalView === 'candidate'" class="page-shell max-w-4xl">
+      <!-- 1.1 Login Screen -->
+      <div v-if="!candidateLoggedIn" class="mx-auto my-12 w-full max-w-md surface p-8">
+        <div class="text-center mb-6">
+          <h2 class="text-xl font-bold text-slate-900">候选人登录</h2>
+          <p class="mt-2 text-sm text-slate-500">请输入您投递简历时使用的邮箱获取验证码</p>
+        </div>
+        
+        <el-form :model="loginForm" label-position="top" ref="loginFormRef" :rules="loginRules">
+          <el-form-item label="电子邮箱" prop="email">
+            <el-input 
+              v-model="loginForm.email" 
+              placeholder="请输入邮箱 (测试用: candidate@example.com)" 
+              clearable
+            >
+              <template #prefix>
+                <el-icon><Message /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
+          
+          <el-form-item label="验证码" prop="code">
+            <div class="flex w-full gap-3">
+              <el-input 
+                v-model="loginForm.code" 
+                placeholder="请输入 6 位验证码" 
+                maxlength="6"
+                class="flex-1"
+              >
+                <template #prefix>
+                  <el-icon><Key /></el-icon>
+                </template>
+              </el-input>
+              <el-button 
+                :disabled="countdown > 0" 
+                @click="sendVerificationCode"
+                class="w-32"
+              >
+                {{ countdown > 0 ? `${countdown}s` : '获取验证码' }}
+              </el-button>
+            </div>
+          </el-form-item>
+          
+          <div class="mt-6">
+            <el-button 
+              type="primary" 
+              class="w-full" 
+              :loading="loginLoading" 
+              @click="handleCandidateLogin"
+            >
+              登录
+            </el-button>
+          </div>
+        </el-form>
+        
+        <div class="mt-6 rounded-lg bg-blue-50/50 border border-blue-100 p-3.5 text-xs text-blue-800">
+          <p class="font-semibold mb-1">💡 原型测试提示：</p>
+          <ul class="list-disc list-inside space-y-1">
+            <li>输入 <strong>candidate@example.com</strong>，验证码输入任意 6 位数均可成功登录。</li>
+            <li>输入其他邮箱将模拟“无投递记录”的拦截提示，保障数据安全。</li>
+            <li>规则提示：验证码 10 分钟过期、最多尝试 5 次、同一邮箱 60 秒发送冷却。</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 1.2 Candidate Main Portal -->
+      <div v-else class="grid gap-6 md:grid-cols-4">
+        <!-- Left Sidebar: Applications -->
+        <div class="md:col-span-1 flex flex-col gap-4">
+          <div class="surface p-4">
+            <div class="flex items-center gap-2 mb-4">
+              <el-avatar :size="36" class="bg-blue-100 text-blue-600 font-bold">
+                {{ loginForm.email.substring(0, 2).toUpperCase() }}
+              </el-avatar>
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold text-slate-900 truncate">张小明</div>
+                <div class="text-xs text-slate-500 truncate">{{ loginForm.email }}</div>
+              </div>
+              <el-tooltip content="退出登录" placement="top">
+                <el-button circle size="small" @click="handleCandidateLogout">
+                  <el-icon><SwitchButton /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
+            
+            <div class="border-t border-slate-100 pt-3">
+              <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">我的投递</div>
+              <div class="space-y-1">
+                <div 
+                  v-for="app in candidateApplications" 
+                  :key="app.id"
+                  @click="selectCandidateApplication(app)"
+                  :class="selectedAppId === app.id ? 'bg-blue-50 border-blue-200 text-blue-700 font-semibold' : 'border-transparent text-slate-600 hover:bg-slate-50'"
+                  class="cursor-pointer rounded-lg border p-2.5 transition text-xs"
+                >
+                  <div class="flex justify-between items-center mb-1">
+                    <span class="truncate max-w-[120px]">{{ app.positionTitle }}</span>
+                    <el-tag size="small" :type="getStatusTagType(app.status)">{{ app.status }}</el-tag>
+                  </div>
+                  <div class="text-[10px] text-slate-400">投递时间: {{ app.appliedAt }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Main: Chat Area -->
+        <div class="md:col-span-3 flex flex-col h-[600px] surface overflow-hidden">
+          <div v-if="activeApp" class="flex flex-col h-full">
+            <!-- Chat Header -->
+            <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 bg-white">
+              <div>
+                <h3 class="font-semibold text-slate-900">{{ activeApp.positionTitle }} - 沟通窗口</h3>
+                <p class="text-xs text-slate-500 mt-0.5">招聘企业：星澜智能 | 当前流程阶段：{{ activeApp.status }}</p>
+              </div>
+              <el-tag size="small" type="success" effect="plain">
+                <span class="flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>HR 在线</span>
+              </el-tag>
+            </div>
+
+            <!-- Messages List -->
+            <div ref="candidateChatList" class="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/50 chat-scrollbar">
+              <div 
+                v-for="msg in activeAppMessages" 
+                :key="msg.id" 
+                class="flex"
+                :class="msg.sender_type === 'candidate' ? 'justify-end' : 'justify-start'"
+              >
+                <div class="flex gap-2 max-w-[80%]" :class="msg.sender_type === 'candidate' ? 'flex-row-reverse' : 'flex-row'">
+                  <el-avatar :size="32" :class="msg.sender_type === 'candidate' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'">
+                    {{ msg.sender_type === 'candidate' ? '我' : 'HR' }}
+                  </el-avatar>
+                  <div>
+                    <div class="text-[10px] text-slate-400 mb-1" :class="msg.sender_type === 'candidate' ? 'text-right' : 'text-left'">
+                      {{ msg.sender_type === 'candidate' ? '张小明' : '职位负责人' }} · {{ msg.created_at }}
+                    </div>
+                    <div 
+                      :class="msg.sender_type === 'candidate' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'"
+                      class="rounded-lg px-4 py-2.5 text-sm shadow-sm whitespace-pre-wrap leading-relaxed"
+                    >
+                      {{ msg.content }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chat Input -->
+            <div class="border-t border-slate-100 p-4 bg-white">
+              <div class="flex gap-2">
+                <el-input 
+                  v-model="candidateInput" 
+                  placeholder="请输入您想咨询或回复的内容..." 
+                  type="textarea"
+                  :rows="2"
+                  resize="none"
+                  @keyup.enter.ctrl="sendCandidateMessage"
+                />
+                <el-button 
+                  type="primary" 
+                  class="h-auto px-6" 
+                  @click="sendCandidateMessage"
+                  :disabled="!candidateInput.trim()"
+                >
+                  发送
+                </el-button>
+              </div>
+              <div class="flex justify-between items-center mt-2 text-[11px] text-slate-400">
+                <span>按 Ctrl + Enter 快捷发送</span>
+                <span class="text-blue-500 cursor-pointer hover:underline" @click="fillCandidateDemoMessage">💡 填入测试消息</span>
+              </div>
+            </div>
+          </div>
+          
+          <div v-else class="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50/20">
+            <el-icon :size="48"><ChatDotSquare /></el-icon>
+            <p class="mt-2 text-sm">请在左侧选择一个职位投递进入会话</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 2. HR WORKSTATION (HR 工作台) -->
+    <!-- ========================================== -->
+    <div v-if="globalView === 'hr'" class="page-shell">
+      <div class="flex flex-col md:flex-row gap-5">
+        <!-- Left Sidebar: HR Navigation -->
+        <aside class="w-full md:w-48 shrink-0 flex flex-col gap-2">
+          <button 
+            type="button"
+            @click="hrSubView = 'chat'"
+            :class="hrSubView === 'chat' ? 'bg-blue-50 text-blue-700 font-semibold border-l-4 border-blue-600' : 'text-slate-600 hover:bg-slate-100'"
+            class="flex items-center gap-2 px-4 py-3 rounded-r-lg text-sm text-left transition"
+          >
+            <el-icon><ChatLineRound /></el-icon>会话工作台
+            <span v-if="unreadConversationsCount > 0" class="ml-auto bg-red-500 text-white rounded-full px-1.5 py-0.5 text-[10px]">{{ unreadConversationsCount }}</span>
+          </button>
+          <button 
+            type="button"
+            @click="hrSubView = 'todo'"
+            :class="hrSubView === 'todo' ? 'bg-blue-50 text-blue-700 font-semibold border-l-4 border-blue-600' : 'text-slate-600 hover:bg-slate-100'"
+            class="flex items-center gap-2 px-4 py-3 rounded-r-lg text-sm text-left transition"
+          >
+            <el-icon><Checked /></el-icon>待办中心
+            <span v-if="pendingTasksCount > 0" class="ml-auto bg-blue-600 text-white rounded-full px-1.5 py-0.5 text-[10px]">{{ pendingTasksCount }}</span>
+          </button>
+        </aside>
+
+        <!-- Right Main Area -->
+        <main class="flex-1 min-w-0">
+          <!-- 2.1 HR CHAT WORKBENCH (会话工作台) -->
+          <div v-if="hrSubView === 'chat'" class="grid grid-cols-1 lg:grid-cols-12 gap-5 h-[700px]">
+            <!-- 2.1.1 Candidate Sessions List (4 cols) -->
+            <div class="lg:col-span-3 surface flex flex-col overflow-hidden h-full">
+              <div class="border-b border-slate-100 p-4 bg-white">
+                <el-input 
+                  v-model="hrSessionSearch" 
+                  placeholder="搜索候选人姓名/职位" 
+                  clearable
+                  size="small"
+                >
+                  <template #prefix>
+                    <el-icon><Search /></el-icon>
+                  </template>
+                </el-input>
+              </div>
+              
+              <el-scrollbar class="flex-1 bg-slate-50/30">
+                <div class="p-2 space-y-1">
+                  <div 
+                    v-for="session in filteredHRSessions" 
+                    :key="session.id"
+                    @click="selectHRSession(session)"
+                    :class="activeSessionId === session.id ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'border-transparent hover:bg-slate-100/80 text-slate-600'"
+                    class="cursor-pointer rounded-lg border p-3 transition"
+                  >
+                    <div class="flex justify-between items-start mb-1.5">
+                      <div class="font-semibold text-sm text-slate-900 flex items-center gap-1.5">
+                        {{ session.candidateName }}
+                        <span v-if="session.unread" class="h-2 w-2 rounded-full bg-red-500"></span>
+                      </div>
+                      <span class="text-[10px] text-slate-400">{{ session.lastMessageTime }}</span>
+                    </div>
+                    <div class="text-xs text-slate-500 mb-1.5 truncate">{{ session.positionTitle }}</div>
+                    <div class="flex justify-between items-center">
+                      <span class="text-[11px] text-slate-400 truncate max-w-[120px] italic">"{{ session.lastMessageContent }}"</span>
+                      <el-tag size="small" :type="getStatusTagType(session.status)">{{ session.status }}</el-tag>
+                    </div>
+                  </div>
+                </div>
+              </el-scrollbar>
+            </div>
+
+            <!-- 2.1.2 Chat Window (5 cols) -->
+            <div class="lg:col-span-5 surface flex flex-col overflow-hidden h-full">
+              <div v-if="activeSession" class="flex flex-col h-full bg-white">
+                <!-- Chat Header -->
+                <div class="border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <h3 class="font-semibold text-slate-900">{{ activeSession.candidateName }}</h3>
+                      <el-tag size="small" :type="getStatusTagType(activeSession.status)">{{ activeSession.status }}</el-tag>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">投递职位：{{ activeSession.positionTitle }}</p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <el-button size="small" plain @click="openCandidateDetails(activeSession)">
+                      候选人详情
+                    </el-button>
+                  </div>
+                </div>
+
+                <!-- Messages List -->
+                <div ref="hrChatList" class="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/50 chat-scrollbar">
+                  <div 
+                    v-for="msg in activeSessionMessages" 
+                    :key="msg.id" 
+                    :id="`msg-${msg.id}`"
+                    class="flex transition-all duration-300 rounded-lg p-1"
+                    :class="[
+                      msg.sender_type === 'hr' ? 'justify-end' : 'justify-start',
+                      highlightedMessageId === msg.id ? 'message-highlight' : ''
+                    ]"
+                  >
+                    <div class="flex gap-2 max-w-[85%]" :class="msg.sender_type === 'hr' ? 'flex-row-reverse' : 'flex-row'">
+                      <el-avatar :size="32" :class="msg.sender_type === 'hr' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'">
+                        {{ msg.sender_type === 'hr' ? 'HR' : '候' }}
+                      </el-avatar>
+                      <div>
+                        <div class="text-[10px] text-slate-400 mb-1" :class="msg.sender_type === 'hr' ? 'text-right' : 'text-left'">
+                          {{ msg.sender_type === 'hr' ? '我' : activeSession.candidateName }} · {{ msg.created_at }}
+                          <span v-if="msg.id" class="text-[9px] text-slate-300 ml-1">#{{ msg.id }}</span>
+                        </div>
+                        <div 
+                          :class="msg.sender_type === 'hr' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'"
+                          class="rounded-lg px-4 py-2.5 text-sm shadow-sm whitespace-pre-wrap leading-relaxed"
+                        >
+                          {{ msg.content }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AI Analyzing Overlay -->
+                <div v-if="aiAnalyzing" class="bg-blue-50 border-y border-blue-100 px-4 py-2 flex items-center justify-between text-xs text-blue-700">
+                  <span class="flex items-center gap-2">
+                    <span class="flex h-2 w-2 relative">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                    </span>
+                    AI 正在对最新消息进行结构化洞察分析与待办提取...
+                  </span>
+                  <el-tag size="small" type="warning" effect="plain" class="animate-pulse">异步处理中</el-tag>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="border-t border-slate-100 p-4 bg-white">
+                  <div class="flex gap-2">
+                    <el-input 
+                      v-model="hrInput" 
+                      placeholder="请输入人工回复内容 (首期不提供 AI 自动回复，由 HR 确认后外发)..." 
+                      type="textarea"
+                      :rows="2"
+                      resize="none"
+                      @keyup.enter.ctrl="sendHRMessage"
+                    />
+                    <el-button 
+                      type="primary" 
+                      class="h-auto px-6" 
+                      @click="sendHRMessage"
+                      :disabled="!hrInput.trim()"
+                    >
+                      回复
+                    </el-button>
+                  </div>
+                  <div class="flex justify-between items-center mt-2 text-[11px] text-slate-400">
+                    <span>按 Ctrl + Enter 快捷发送</span>
+                    <span class="text-slate-400">所有外发消息均由人工控制</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div v-else class="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50/20">
+                <el-icon :size="48"><ChatDotSquare /></el-icon>
+                <p class="mt-2 text-sm">请在左侧选择一个候选人会话</p>
+              </div>
+            </div>
+
+            <!-- 2.1.3 AI Insights & Tasks (4 cols) -->
+            <div class="lg:col-span-4 flex flex-col gap-4 h-full overflow-hidden">
+              <div v-if="activeSession" class="flex flex-col h-full gap-4">
+                <!-- AI Insight Card -->
+                <div class="surface flex-1 flex flex-col overflow-hidden bg-white">
+                  <div class="surface-header py-3 px-4 flex items-center justify-between shrink-0">
+                    <div class="flex items-center gap-1.5">
+                      <el-icon class="text-blue-600"><Cpu /></el-icon>
+                      <span class="font-semibold text-sm text-slate-900">AI 结构化洞察</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <el-tag v-if="activeSessionInsight.confidence < 0.75" size="small" type="danger">低置信·待复核</el-tag>
+                      <span class="text-[11px] text-slate-400">置信度:</span>
+                      <el-tag size="small" :type="activeSessionInsight.confidence >= 0.85 ? 'success' : (activeSessionInsight.confidence >= 0.75 ? 'warning' : 'danger')">
+                        {{ Math.round(activeSessionInsight.confidence * 100) }}%
+                      </el-tag>
+                    </div>
+                  </div>
+                  
+                  <el-scrollbar class="flex-1 p-4">
+                    <div class="space-y-4 text-xs">
+                      <div class="flex flex-wrap gap-2 text-[10px] text-slate-400">
+                        <span>快照 v{{ activeSessionInsight.version || 1 }}</span>
+                        <span>·</span>
+                        <span>更新于 {{ activeSessionInsight.updated_at || '-' }}</span>
+                        <span class="text-slate-300">（仅 HR 可见，候选人端永不展示）</span>
+                      </div>
+
+                      <!-- Summary -->
+                      <div>
+                        <div class="font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                          <span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span>会话摘要
+                        </div>
+                        <div class="bg-slate-50 rounded-lg p-2.5 text-slate-600 leading-relaxed border border-slate-100">
+                          {{ activeSessionInsight.summary }}
+                        </div>
+                      </div>
+
+                      <div v-if="activeSessionInsight.latest_change">
+                        <div class="font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                          <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>最新变化
+                        </div>
+                        <div class="bg-amber-50/70 rounded-lg p-2.5 text-amber-900 leading-relaxed border border-amber-100">
+                          {{ activeSessionInsight.latest_change }}
+                        </div>
+                      </div>
+
+                      <!-- Intent & Stage -->
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <div class="font-semibold text-slate-700 mb-1">当前意图</div>
+                          <el-tag size="small" type="info" class="w-full text-center">{{ getIntentLabel(activeSessionInsight.intent) }}</el-tag>
+                        </div>
+                        <div>
+                          <div class="font-semibold text-slate-700 mb-1">沟通阶段</div>
+                          <el-tag size="small" type="warning" class="w-full text-center">{{ getStageLabel(activeSessionInsight.communication_stage) }}</el-tag>
+                        </div>
+                      </div>
+
+                      <!-- Confirmed Facts -->
+                      <div>
+                        <div class="font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                          <span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span>已确认事实
+                        </div>
+                        <div v-if="activeSessionInsight.confirmed_facts.length" class="space-y-2">
+                          <div 
+                            v-for="(fact, index) in activeSessionInsight.confirmed_facts" 
+                            :key="index"
+                            class="flex items-start justify-between gap-2 p-2 bg-slate-50 rounded border border-slate-100 hover:border-blue-200 transition"
+                          >
+                            <span class="text-slate-600 leading-relaxed">{{ fact.text }}</span>
+                            <el-button 
+                              size="small" 
+                              link 
+                              type="primary" 
+                              class="shrink-0"
+                              @click="locateEvidence(fact.evidence_message_ids)"
+                            >
+                              证据 #{{ fact.evidence_message_ids.join(',') }}
+                            </el-button>
+                          </div>
+                        </div>
+                        <div v-else class="text-slate-400 italic text-center py-1">暂无确认事实</div>
+                      </div>
+
+                      <!-- Requests & Commitments -->
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <div class="font-semibold text-slate-700 mb-1">候选人诉求</div>
+                          <ul v-if="activeSessionInsight.candidate_requests.length" class="list-disc list-inside space-y-1 text-slate-600 pl-1">
+                            <li v-for="(req, idx) in activeSessionInsight.candidate_requests" :key="idx">{{ req }}</li>
+                          </ul>
+                          <div v-else class="text-slate-400 italic">暂无诉求</div>
+                        </div>
+                        <div>
+                          <div class="font-semibold text-slate-700 mb-1">候选人承诺</div>
+                          <ul v-if="activeSessionInsight.candidate_commitments.length" class="list-disc list-inside space-y-1 text-slate-600 pl-1">
+                            <li v-for="(cmt, idx) in activeSessionInsight.candidate_commitments" :key="idx">{{ cmt }}</li>
+                          </ul>
+                          <div v-else class="text-slate-400 italic">暂无承诺</div>
+                        </div>
+                      </div>
+
+                      <!-- Risks -->
+                      <div>
+                        <div class="font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                          <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>风险与冲突提示
+                        </div>
+                        <div v-if="activeSessionInsight.risks.length" class="space-y-1.5">
+                          <div 
+                            v-for="(risk, idx) in activeSessionInsight.risks" 
+                            :key="idx"
+                            class="p-2 rounded bg-red-50 border border-red-100 text-red-700 font-medium"
+                          >
+                            ⚠️ {{ risk }}
+                          </div>
+                        </div>
+                        <div v-else class="text-slate-400 italic text-center py-1">🟢 暂无明显风险与信息冲突</div>
+                      </div>
+
+                      <!-- Next Step -->
+                      <div>
+                        <div class="font-semibold text-slate-700 mb-1">下一步建议</div>
+                        <div class="bg-blue-50/50 border border-blue-100 rounded-lg p-2.5 text-blue-800 leading-relaxed">
+                          {{ activeSessionInsight.next_step }}
+                        </div>
+                      </div>
+                    </div>
+                  </el-scrollbar>
+                </div>
+
+                <!-- Linked Tasks Card -->
+                <div class="surface h-48 flex flex-col overflow-hidden bg-white shrink-0">
+                  <div class="surface-header py-2.5 px-4 flex items-center justify-between shrink-0">
+                    <span class="font-semibold text-sm text-slate-900">关联 HR 待办任务</span>
+                    <el-tag size="small" type="info">{{ activeSessionTasks.length }} 个任务</el-tag>
+                  </div>
+                  
+                  <el-scrollbar class="flex-1 p-3">
+                    <div v-if="activeSessionTasks.length" class="space-y-2">
+                      <div 
+                        v-for="task in activeSessionTasks" 
+                        :key="task.id"
+                        class="flex items-center justify-between p-2 rounded border border-slate-100 bg-slate-50/50 hover:border-slate-200 transition text-xs"
+                      >
+                        <div class="min-w-0 flex-1">
+                          <div class="flex items-center gap-1.5 mb-1">
+                            <el-tag size="small" :type="getTaskPriorityTagType(task.priority)" class="scale-90 transform origin-left">
+                              {{ getTaskPriorityLabel(task.priority) }}
+                            </el-tag>
+                            <span class="font-semibold text-slate-800 truncate">{{ getTaskTypeLabel(task.task_type) }}</span>
+                          </div>
+                          <div class="text-[10px] text-slate-500 truncate">{{ task.rationale }}</div>
+                        </div>
+                        <div class="flex items-center gap-1.5 ml-2 shrink-0">
+                          <el-tag size="small" :type="getTaskStatusTagType(task.status)">{{ getTaskStatusLabel(task.status) }}</el-tag>
+                          <el-button size="small" type="primary" link @click="openTaskDetails(task)">去处理</el-button>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else class="text-slate-400 italic text-center py-6 text-xs">暂无关联待办</div>
+                  </el-scrollbar>
+                </div>
+              </div>
+              
+              <div v-else class="surface flex-1 flex items-center justify-center text-slate-400 bg-white">
+                <p class="text-xs">选择会话后查看 AI 洞察与待办</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2.2 HR TODO CENTER (待办中心) -->
+          <div v-if="hrSubView === 'todo'" class="space-y-4">
+            <!-- 2.2.1 Stat Cards -->
+            <div class="grid gap-4 grid-cols-2 md:grid-cols-4">
+              <div class="stat-card">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-500">待处理任务</span>
+                  <span class="icon-tile text-blue-600 bg-blue-50 border-blue-100"><el-icon><List /></el-icon></span>
+                </div>
+                <div class="mt-2 text-2xl font-bold text-slate-900">{{ todoStats.pending }}</div>
+              </div>
+              <div class="stat-card">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-500">高优先级</span>
+                  <span class="icon-tile text-red-600 bg-red-50 border-red-100"><el-icon><Warning /></el-icon></span>
+                </div>
+                <div class="mt-2 text-2xl font-bold text-slate-900">{{ todoStats.highPriority }}</div>
+              </div>
+              <div class="stat-card">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-500">今日逾期</span>
+                  <span class="icon-tile text-amber-600 bg-amber-50 border-amber-100"><el-icon><Clock /></el-icon></span>
+                </div>
+                <div class="mt-2 text-2xl font-bold text-slate-900">{{ todoStats.overdue }}</div>
+              </div>
+              <div class="stat-card">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-slate-500">已完成任务</span>
+                  <span class="icon-tile text-green-600 bg-green-50 border-green-100"><el-icon><CircleCheck /></el-icon></span>
+                </div>
+                <div class="mt-2 text-2xl font-bold text-slate-900">{{ todoStats.completed }}</div>
+              </div>
+            </div>
+
+            <!-- 2.2.2 Filters -->
+            <div class="surface">
+              <div class="surface-header py-3 px-4">
+                <div>
+                  <div class="surface-title text-sm">筛选条件</div>
+                  <div class="surface-subtitle">默认展示当前登录 HR 负责的待办；首期不发站内/邮件提醒</div>
+                </div>
+              </div>
+              <div class="p-4 flex flex-wrap gap-3 items-center bg-white">
+                <el-input 
+                  v-model="todoFilters.keyword" 
+                  placeholder="姓名、职位或关键字" 
+                  clearable
+                  class="w-48"
+                  size="small"
+                />
+
+                <el-select v-model="todoFilters.owner" placeholder="负责人" class="w-36" size="small">
+                  <el-option label="我的待办" value="me" />
+                  <el-option label="全部负责人（管理员）" value="all" />
+                </el-select>
+                
+                <el-select v-model="todoFilters.taskType" placeholder="任务类型" clearable class="w-40" size="small">
+                  <el-option label="全部类型" value="" />
+                  <el-option label="回复候选人" value="reply_candidate" />
+                  <el-option label="确认面试信息" value="confirm_interview_information" />
+                  <el-option label="跟进补充资料" value="follow_up_materials" />
+                  <el-option label="人工复核风险" value="review_risk" />
+                </el-select>
+
+                <el-select v-model="todoFilters.status" placeholder="任务状态" clearable class="w-32" size="small">
+                  <el-option label="全部状态" value="" />
+                  <el-option label="待处理" value="pending" />
+                  <el-option label="处理中" value="in_progress" />
+                  <el-option label="已完成" value="done" />
+                  <el-option label="已关闭" value="closed" />
+                </el-select>
+
+                <el-select v-model="todoFilters.priority" placeholder="优先级" clearable class="w-28" size="small">
+                  <el-option label="全部优先级" value="" />
+                  <el-option label="高" value="high" />
+                  <el-option label="中" value="medium" />
+                  <el-option label="低" value="low" />
+                </el-select>
+
+                <el-select v-model="todoFilters.position" placeholder="全部职位" clearable class="w-44" size="small">
+                  <el-option label="全部职位" value="" />
+                  <el-option label="高级算法工程师" value="高级算法工程师" />
+                  <el-option label="UI/UX 设计师" value="UI/UX 设计师" />
+                  <el-option label="前端开发工程师" value="前端开发工程师" />
+                </el-select>
+
+                <el-checkbox v-model="todoFilters.overdueOnly" size="small" class="!mr-0">仅逾期</el-checkbox>
+
+                <div class="ml-auto flex gap-2">
+                  <el-button type="primary" size="small" @click="applyTodoFilters">查询</el-button>
+                  <el-button size="small" @click="resetTodoFilters">重置</el-button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2.2.3 Task Table -->
+            <div class="surface overflow-hidden">
+              <el-table :data="filteredTasks" style="width: 100%" stripe size="small">
+                <el-table-column label="候选人" min-width="100">
+                  <template #default="scope">
+                    <div class="font-semibold text-slate-900">{{ scope.row.candidateName }}</div>
+                    <div class="text-[10px] text-slate-400 mt-0.5">负责人：{{ scope.row.owner_user_name || '职位负责人' }}</div>
+                  </template>
+                </el-table-column>
+                
+                <el-table-column prop="positionTitle" label="申请职位" min-width="130" show-overflow-tooltip></el-table-column>
+                
+                <el-table-column label="任务类型" min-width="120">
+                  <template #default="scope">
+                    <span class="font-medium text-slate-800">{{ getTaskTypeLabel(scope.row.task_type) }}</span>
+                  </template>
+                </el-table-column>
+                
+                <el-table-column label="优先级" width="90">
+                  <template #default="scope">
+                    <el-tag size="small" :type="getTaskPriorityTagType(scope.row.priority)">
+                      {{ getTaskPriorityLabel(scope.row.priority) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+
+                <el-table-column label="截止时间" min-width="130">
+                  <template #default="scope">
+                    <span :class="isOverdue(scope.row.due_at) && scope.row.status !== 'done' ? 'text-red-600 font-medium' : 'text-slate-600'">
+                      {{ scope.row.due_at }}
+                      <span v-if="isOverdue(scope.row.due_at) && scope.row.status !== 'done'" class="text-[10px] bg-red-100 text-red-700 px-1 rounded ml-1">逾期</span>
+                    </span>
+                  </template>
+                </el-table-column>
+
+                <el-table-column label="任务状态" width="90">
+                  <template #default="scope">
+                    <el-tag size="small" :type="getTaskStatusTagType(scope.row.status)" effect="light">
+                      {{ getTaskStatusLabel(scope.row.status) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+
+                <el-table-column label="触发证据" min-width="180" show-overflow-tooltip>
+                  <template #default="scope">
+                    <span class="text-slate-500 italic">"{{ scope.row.evidence_text }}"</span>
+                  </template>
+                </el-table-column>
+
+                <el-table-column label="操作" width="220" fixed="right">
+                  <template #default="scope">
+                    <el-button 
+                      link 
+                      type="primary" 
+                      @click="openConversationFromTask(scope.row)"
+                    >
+                      进入会话
+                    </el-button>
+                    <el-button 
+                      v-if="scope.row.status === 'pending'" 
+                      link 
+                      type="primary" 
+                      @click="changeTaskStatus(scope.row, 'in_progress')"
+                    >
+                      开始处理
+                    </el-button>
+                    <el-button 
+                      v-if="scope.row.status === 'in_progress' || scope.row.status === 'pending'" 
+                      link 
+                      type="success" 
+                      @click="changeTaskStatus(scope.row, 'done')"
+                    >
+                      完成
+                    </el-button>
+                    <el-button 
+                      link 
+                      type="primary" 
+                      @click="openTaskDetails(scope.row)"
+                    >
+                      详情
+                    </el-button>
+                    <el-button 
+                      v-if="scope.row.status !== 'closed' && scope.row.status !== 'done'" 
+                      link 
+                      type="danger" 
+                      @click="changeTaskStatus(scope.row, 'closed')"
+                    >
+                      关闭
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              
+              <div v-if="filteredTasks.length === 0" class="p-8 text-center text-slate-400 bg-white">
+                <el-icon :size="32" class="align-middle mb-1"><FolderOpened /></el-icon>
+                <p class="text-xs">暂无符合筛选条件的待办任务</p>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 3. DIALOGS & DRAWERS (弹窗与抽屉) -->
+    <!-- ========================================== -->
+    
+    <!-- 3.1 Candidate Details Dialog -->
+    <el-dialog 
+      v-model="candidateDetailsVisible" 
+      title="候选人详细档案" 
+      width="680px"
+    >
+      <div v-if="selectedCandidateDetail" class="space-y-4">
+        <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+          <el-avatar :size="48" class="bg-blue-100 text-blue-600 font-bold text-lg">
+            {{ selectedCandidateDetail.candidateName.substring(0, 1) }}
+          </el-avatar>
+          <div>
+            <h3 class="text-base font-bold text-slate-900">{{ selectedCandidateDetail.candidateName }}</h3>
+            <p class="text-xs text-slate-500 mt-0.5">申请职位：{{ selectedCandidateDetail.positionTitle }} | 状态：{{ selectedCandidateDetail.status }}</p>
+          </div>
+        </div>
+        
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="电子邮箱">candidate@example.com</el-descriptions-item>
+          <el-descriptions-item label="联系电话">138-0000-1234</el-descriptions-item>
+          <el-descriptions-item label="性别">男</el-descriptions-item>
+          <el-descriptions-item label="工作年限">5 年</el-descriptions-item>
+          <el-descriptions-item label="最高学历">硕士 (北京邮电大学)</el-descriptions-item>
+          <el-descriptions-item label="期望薪资">30k-35k</el-descriptions-item>
+        </el-descriptions>
+        
+        <div>
+          <h4 class="font-semibold text-xs text-slate-700 mb-2">简历摘要</h4>
+          <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 leading-relaxed border border-slate-100">
+            5年大厂算法开发经验，精通深度学习、自然语言处理与大语言模型微调。曾负责推荐系统算法优化，提升核心指标15%。具备优秀的业务理解能力与团队协作精神。
+          </div>
+        </div>
+        
+        <div class="rounded-lg bg-slate-50 border border-slate-200/80 p-3 flex justify-between items-center text-xs text-slate-600">
+          <span>📄 原始附件简历：<strong>张小明_算法工程师_简历.pdf</strong></span>
+          <el-button size="small" type="primary" plain>在线预览</el-button>
+        </div>
+
+        <div class="rounded-lg bg-amber-50 border border-amber-100 p-3 text-xs text-amber-900 leading-relaxed">
+          正式招聘状态变更、面试安排等业务动作请通过既有候选人流程完成；本模块 AI 洞察只提供建议与待办，不自动修改正式状态。
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 3.2 Task Details Drawer -->
+    <el-drawer 
+      v-model="taskDetailsVisible" 
+      title="待办任务详情" 
+      size="460px"
+    >
+      <div v-if="selectedTask" class="space-y-5 text-xs">
+        <!-- Task Basic Info -->
+        <div class="border-b border-slate-100 pb-4">
+          <div class="flex items-center gap-2 mb-2">
+            <el-tag :type="getTaskPriorityTagType(selectedTask.priority)">
+              {{ getTaskPriorityLabel(selectedTask.priority) }} 优先级
+            </el-tag>
+            <el-tag :type="getTaskStatusTagType(selectedTask.status)" effect="plain">
+              {{ getTaskStatusLabel(selectedTask.status) }}
+            </el-tag>
+          </div>
+          <h3 class="text-sm font-bold text-slate-900">{{ getTaskTypeLabel(selectedTask.task_type) }}</h3>
+          <p class="text-slate-500 mt-1">候选人：{{ selectedTask.candidateName }} | 职位：{{ selectedTask.positionTitle }}</p>
+        </div>
+
+        <!-- Rationale -->
+        <div>
+          <div class="font-semibold text-slate-700 mb-1">创建原因 / 触发逻辑</div>
+          <div class="bg-slate-50 rounded-lg p-3 text-slate-600 leading-relaxed border border-slate-100">
+            {{ selectedTask.rationale }}
+          </div>
+        </div>
+
+        <!-- Evidence Message -->
+        <div>
+          <div class="font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
+            <span>原始消息证据</span>
+            <el-button size="small" link type="primary" @click="locateEvidenceFromTask(selectedTask)">在会话中定位</el-button>
+          </div>
+          <div class="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-slate-700 italic relative">
+            <span class="absolute -top-2 -left-1 text-2xl text-blue-200 font-serif">“</span>
+            <p class="pl-3 pr-2 leading-relaxed">
+              {{ selectedTask.evidence_text }}
+            </p>
+            <div class="text-[10px] text-slate-400 text-right mt-2">
+              消息时间：{{ selectedTask.due_at }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Due Date -->
+        <div class="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100">
+          <span class="font-semibold text-slate-700">建议截止时间</span>
+          <span :class="isOverdue(selectedTask.due_at) && selectedTask.status !== 'done' ? 'text-red-600 font-bold' : 'text-slate-700'">
+            {{ selectedTask.due_at }}
+          </span>
+        </div>
+
+        <!-- Action Area -->
+        <div class="border-t border-slate-100 pt-4 space-y-3">
+          <div class="font-semibold text-slate-700 mb-1">处理操作</div>
+          <div class="flex gap-2">
+            <el-button 
+              v-if="selectedTask.status === 'pending'" 
+              type="primary" 
+              class="flex-1"
+              @click="changeTaskStatus(selectedTask, 'in_progress')"
+            >
+              开始处理
+            </el-button>
+            <el-button 
+              v-if="selectedTask.status === 'in_progress' || selectedTask.status === 'pending'" 
+              type="success" 
+              class="flex-1"
+              @click="changeTaskStatus(selectedTask, 'done')"
+            >
+              标记完成
+            </el-button>
+            <el-button 
+              v-if="selectedTask.status !== 'closed' && selectedTask.status !== 'done'" 
+              type="danger" 
+              plain
+              class="w-24"
+              @click="changeTaskStatus(selectedTask, 'closed')"
+            >
+              关闭任务
+            </el-button>
+          </div>
+        </div>
+
+        <!-- Processing Notes -->
+        <div class="space-y-2">
+          <div class="font-semibold text-slate-700">处理备注记录</div>
+          
+          <div class="flex gap-2">
+            <el-input 
+              v-model="newTaskNote" 
+              placeholder="添加一条处理备注..." 
+              size="small"
+              class="flex-1"
+            />
+            <el-button type="primary" size="small" @click="addTaskNote">添加</el-button>
+          </div>
+
+          <div class="space-y-2 mt-2">
+            <div 
+              v-for="(note, idx) in selectedTask.notes" 
+              :key="idx" 
+              class="p-2.5 rounded bg-slate-50 border border-slate-100 text-[11px]"
+            >
+              <div class="flex justify-between text-slate-400 mb-1">
+                <span>HR 负责人</span>
+                <span>{{ note.time }}</span>
+              </div>
+              <p class="text-slate-700 leading-relaxed">{{ note.content }}</p>
+            </div>
+            <div v-if="!selectedTask.notes || selectedTask.notes.length === 0" class="text-slate-400 italic text-center py-2">
+              暂无处理备注
+            </div>
+          </div>
+        </div>
+      </div>
+    </el-drawer>
+  </div>
+
+  <script>
+    const { createApp, ref, computed, nextTick } = Vue;
+
+    const app = createApp({
+      setup() {
+        // Global Navigation State
+        const globalView = ref('hr'); // 'candidate' or 'hr'
+        const hrSubView = ref('chat'); // 'chat' or 'todo'
+
+        // ==========================================
+        // MOCK DATA DEFINITIONS
+        // ==========================================
+        
+        // Candidate Applications
+        const candidateApplications = ref([
+          { id: 'app_1', positionTitle: '高级算法工程师', status: '待面试', appliedAt: '2026-07-10 14:30' },
+          { id: 'app_2', positionTitle: 'Python 研发工程师', status: '简历筛选', appliedAt: '2026-07-12 09:15' }
+        ]);
+
+        // Chat Messages Database (grouped by application/session ID)
+        const messagesDb = ref({
+          'app_1': [
+            { id: 'msg_1', sender_type: 'hr', content: '你好，我是星澜智能的HR，看到你投递了我们的高级算法工程师岗位，你的简历非常匹配。请问你下周什么时间方便进行面试？', created_at: '2026-07-15 10:00' },
+            { id: 'msg_2', sender_type: 'candidate', content: '你好！谢谢联系。我下周二晚上（7点以后）比较方便，或者周四下午也可以。另外我想咨询一下，这个岗位的具体薪资范围大概是多少？', created_at: '2026-07-15 10:15' },
+            { id: 'msg_3', sender_type: 'hr', content: '收到，薪资范围是 25k-40k，具体会根据面试表现来定。面试时间我们正在协调，稍后给您确认。', created_at: '2026-07-15 10:20' },
+            { id: 'msg_4', sender_type: 'candidate', content: '好的，谢谢！我等您的消息。', created_at: '2026-07-15 10:25' }
+          ],
+          'app_2': [
+            { id: 'msg_5', sender_type: 'hr', content: '你好，简历已收到，我们会尽快评估。如果有后续进展会通过邮件或这里通知你。', created_at: '2026-07-12 10:00' }
+          ]
+        });
+
+        // AI Insights Database (keyed by session ID)
+        const insightsDb = ref({
+          'app_1': {
+            version: 3,
+            updated_at: '2026-07-15 10:25',
+            summary: '候选人询问高级算法工程师岗位的薪资范围，并提供了下周二晚上或周四下午的可面试时间。HR 已答复薪资范围，面试时间协调中。',
+            latest_change: '候选人补充了可面时间窗口，并首次提出薪资咨询。',
+            intent: 'salary_consultation',
+            communication_stage: 'waiting_hr_reply',
+            confirmed_facts: [
+              { text: '候选人下周二晚上（7点以后）方便面试', evidence_message_ids: ['msg_2'] },
+              { text: '候选人下周四下午方便面试', evidence_message_ids: ['msg_2'] },
+              { text: 'HR 告知岗位薪资范围为 25k-40k', evidence_message_ids: ['msg_3'] }
+            ],
+            candidate_requests: ['了解高级算法工程师岗位的具体薪资范围'],
+            candidate_commitments: ['等待 HR 确认面试时间'],
+            risks: [],
+            next_step: 'HR 核实面试官时间，确认下周二晚上或周四下午的面试安排并答复候选人。',
+            confidence: 0.95
+          },
+          'app_2': {
+            version: 1,
+            updated_at: '2026-07-12 10:00',
+            summary: '投递初始阶段，HR 告知简历评估中，候选人暂无最新消息。',
+            latest_change: 'HR 已告知简历进入评估流程。',
+            intent: 'other',
+            communication_stage: 'waiting_candidate_reply',
+            confirmed_facts: [
+              { text: '简历已收到并进入评估流程', evidence_message_ids: ['msg_5'] }
+            ],
+            candidate_requests: [],
+            candidate_commitments: [],
+            risks: [],
+            next_step: '等待简历评估结果。',
+            confidence: 0.90
+          },
+          'app_4': {
+            version: 2,
+            updated_at: '2026-07-14 16:40',
+            summary: '候选人反馈期望总包不低于 50 万，与岗位预算上限 40 万冲突；模型置信度偏低，建议人工复核后再决定是否继续推进。',
+            latest_change: '识别到薪资期望与岗位预算冲突，已生成人工复核待办。',
+            intent: 'salary_consultation',
+            communication_stage: 'escalated_to_human',
+            confirmed_facts: [
+              { text: '候选人期望总包不低于 50 万', evidence_message_ids: [] }
+            ],
+            candidate_requests: ['确认能否突破薪资预算'],
+            candidate_commitments: [],
+            risks: ['信息冲突：候选人期望薪资高于岗位预算上限', '低置信：缺少可验证的预算例外审批依据'],
+            next_step: '人工复核是否可破预算；勿由模型直接承诺薪资或变更正式状态。',
+            confidence: 0.62
+          }
+        });
+
+        // HR Todo Tasks Database
+        const tasksDb = ref([
+          {
+            id: 'task_1',
+            conversation_id: 'app_1',
+            candidateName: '张小明',
+            positionTitle: '高级算法工程师',
+            owner_user_name: '我',
+            task_type: 'confirm_interview_information',
+            priority: 'high',
+            status: 'pending',
+            dedupe_key: 'confirm_interview_information:availability',
+            rationale: '候选人提供了明确的面试可面时间 (下周二晚上或周四下午)，需要 HR 确认面试安排。',
+            due_at: '2026-07-15 22:15',
+            evidence_text: '我下周二晚上（7点以后）比较方便，或者周四下午也可以。',
+            evidence_message_ids: ['msg_2'],
+            notes: []
+          },
+          {
+            id: 'task_2',
+            conversation_id: 'app_1',
+            candidateName: '张小明',
+            positionTitle: '高级算法工程师',
+            owner_user_name: '我',
+            task_type: 'reply_candidate',
+            priority: 'high',
+            status: 'pending',
+            dedupe_key: 'reply_candidate:salary_consultation',
+            rationale: '候选人询问算法岗位的具体薪资范围，需要 HR 确认薪资口径并给予明确回复。',
+            due_at: '2026-07-15 22:15',
+            evidence_text: '另外我想咨询一下，这个岗位的具体薪资范围大概是多少？',
+            evidence_message_ids: ['msg_2'],
+            notes: []
+          },
+          {
+            id: 'task_3',
+            conversation_id: 'app_3',
+            candidateName: '李华',
+            positionTitle: 'UI/UX 设计师',
+            owner_user_name: '我',
+            task_type: 'follow_up_materials',
+            priority: 'medium',
+            status: 'in_progress',
+            dedupe_key: 'follow_up_materials:portfolio',
+            rationale: '候选人承诺在明天下午前补充最新的作品集链接，需要跟进确保资料完整提交。',
+            due_at: '2026-07-16 18:00',
+            evidence_text: '我会在明天下午前把最新的作品集链接发给您。',
+            evidence_message_ids: [],
+            notes: [
+              { time: '2026-07-15 11:00', content: '已在微信简单提醒，候选人表示正在整理，下午会发。' }
+            ]
+          },
+          {
+            id: 'task_4',
+            conversation_id: 'app_4',
+            candidateName: '王强',
+            positionTitle: '前端开发工程师',
+            owner_user_name: '我',
+            task_type: 'review_risk',
+            priority: 'high',
+            status: 'pending',
+            dedupe_key: 'review_risk:salary_conflict',
+            rationale: '候选人期望薪资 (总包不低于50万) 与岗位最高预算 (40万) 存在明显冲突；洞察置信度 62%，低于 0.75 阈值但仍保留人工复核待办。',
+            due_at: '2026-07-15 16:00',
+            evidence_text: '我之前的年终奖有10万，所以期望总包不低于50万，但你们JD上写的是最高40万。',
+            evidence_message_ids: [],
+            notes: []
+          }
+        ]);
+
+        // HR Session List (Left panel in HR Chat view)
+        const hrSessions = ref([
+          { id: 'app_1', candidateName: '张小明', positionTitle: '高级算法工程师', status: '待面试', lastMessageTime: '10:25', lastMessageContent: '好的，谢谢！我等您的消息。', unread: true },
+          { id: 'app_2', candidateName: '张小明', positionTitle: 'Python 研发工程师', status: '简历筛选', lastMessageTime: '07-12', lastMessageContent: '简历已收到，我们会尽快评估。', unread: false },
+          { id: 'app_3', candidateName: '李华', positionTitle: 'UI/UX 设计师', status: '简历筛选', lastMessageTime: '昨天', lastMessageContent: '我会在明天下午前把最新的作品集链接发给您。', unread: false },
+          { id: 'app_4', candidateName: '王强', positionTitle: '前端开发工程师', status: '待初试', lastMessageTime: '昨天', lastMessageContent: '我之前的年终奖有10万，所以期望总包不低于50万...', unread: false }
+        ]);
+
+        // ==========================================
+        // 1. CANDIDATE PORTAL LOGIC (候选人端逻辑)
+        // ==========================================
+        const candidateLoggedIn = ref(false);
+        const loginLoading = ref(false);
+        const countdown = ref(0);
+        const loginForm = ref({
+          email: '',
+          code: ''
+        });
+        const loginRules = {
+          email: [
+            { required: true, message: '请输入电子邮箱', trigger: 'blur' },
+            { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
+          ],
+          code: [
+            { required: true, message: '请输入验证码', trigger: 'blur' },
+            { len: 6, message: '验证码为 6 位数字', trigger: 'blur' }
+          ]
+        };
+
+        const selectedAppId = ref('app_1');
+        const candidateInput = ref('');
+        const candidateChatList = ref(null);
+
+        const activeApp = computed(() => {
+          return candidateApplications.value.find(app => app.id === selectedAppId.value);
+        });
+
+        const activeAppMessages = computed(() => {
+          return messagesDb.value[selectedAppId.value] || [];
+        });
+
+        const sendVerificationCode = () => {
+          if (!loginForm.value.email) {
+            ElementPlus.ElMessage.warning('请先输入电子邮箱');
+            return;
+          }
+          // Simple countdown simulation
+          countdown.value = 60;
+          const timer = setInterval(() => {
+            countdown.value--;
+            if (countdown.value <= 0) clearInterval(timer);
+          }, 1000);
+          
+          ElementPlus.ElMessage.success('验证码已发送至您的邮箱，请注意查收！');
+        };
+
+        const handleCandidateLogin = () => {
+          if (!loginForm.value.email || !loginForm.value.code) {
+            ElementPlus.ElMessage.error('请填写完整的登录信息');
+            return;
+          }
+          
+          loginLoading.value = true;
+          
+          setTimeout(() => {
+            loginLoading.value = false;
+            if (loginForm.value.email.trim().toLowerCase() === 'candidate@example.com') {
+              candidateLoggedIn.value = true;
+              ElementPlus.ElMessage.success('登录成功！');
+              scrollToBottom(candidateChatList);
+            } else {
+              // Simulate PRD rule: "没有匹配投递时不创建候选人账号或空会话，并提示联系 HR"
+              ElementPlus.ElMessageBox.alert(
+                '该邮箱暂无投递记录。系统不会为您创建空账号。如果您确已投递，请联系负责您的 HR 确认邮箱是否一致。',
+                '登录提示',
+                { confirmButtonText: '确定', type: 'warning' }
+              );
+            }
+          }, 800);
+        };
+
+        const handleCandidateLogout = () => {
+          candidateLoggedIn.value = false;
+          loginForm.value.code = '';
+          ElementPlus.ElMessage.info('已安全退出候选人门户');
+        };
+
+        const selectCandidateApplication = (app) => {
+          selectedAppId.value = app.id;
+          scrollToBottom(candidateChatList);
+        };
+
+        const fillCandidateDemoMessage = () => {
+          candidateInput.value = '你好，我今天下午有空，能把面试提前到今天下午 4 点吗？另外，面试是视频面试还是电话面试？';
+        };
+
+        // Simulate AI Worker Background Job
+        const aiAnalyzing = ref(false);
+        const triggerAIWorker = (appId, newMsgText, msgId) => {
+          aiAnalyzing.value = true;
+          
+          // Update the session list content immediately
+          const session = hrSessions.value.find(s => s.id === appId);
+          if (session) {
+            session.lastMessageContent = newMsgText;
+            session.lastMessageTime = '刚刚';
+            session.unread = true;
+          }
+
+          setTimeout(() => {
+            aiAnalyzing.value = false;
+            
+            // 1. Update AI Insight Card
+            if (appId === 'app_1') {
+              insightsDb.value['app_1'] = {
+                version: 4,
+                updated_at: formatDateTime(new Date()),
+                summary: '候选人询问是否能将面试提前到今天下午 4 点，并咨询面试形式（视频或电话）。HR 需紧急确认面试官日程及面试形式并答复。',
+                latest_change: '候选人将可面时间从“下周二/周四”更新为请求当天下午 4 点提前面试。',
+                intent: 'interview_time_negotiation',
+                communication_stage: 'confirming_time',
+                confirmed_facts: [
+                  { text: '候选人提出想将面试提前到今天下午 4 点', evidence_message_ids: [msgId] },
+                  { text: '候选人询问面试具体形式 (视频/电话)', evidence_message_ids: [msgId] },
+                  { text: '候选人之前下周二晚上和周四下午也方便', evidence_message_ids: ['msg_2'] }
+                ],
+                candidate_requests: ['将面试提前到今天下午 4 点', '了解面试具体形式 (视频/电话)'],
+                candidate_commitments: [],
+                risks: ['紧急时间调整：候选人提出当天下午面试，可能存在时间冲突风险。'],
+                next_step: 'HR 需立即核实面试官今天下午 4 点是否有空，并明确告知候选人面试形式。',
+                confidence: 0.97
+              };
+
+              // 2. Upsert 同事项待办（不重复创建）
+              const dedupeKey = 'confirm_interview_information:availability';
+              const existing = tasksDb.value.find(
+                t => t.conversation_id === 'app_1' && t.dedupe_key === dedupeKey && (t.status === 'pending' || t.status === 'in_progress')
+              );
+              if (existing) {
+                existing.priority = 'high';
+                existing.rationale = '候选人紧急申请将面试提前至今天下午 4 点，需立即协调面试官时间并答复。（已更新原待办，未新建重复任务）';
+                existing.due_at = '2026-07-15 20:00';
+                existing.evidence_text = newMsgText;
+                existing.evidence_message_ids = [msgId];
+                if (!existing.notes) existing.notes = [];
+                existing.notes.unshift({
+                  time: formatDateTime(new Date()),
+                  content: '系统记录：同一未完成事项被重复提及，已更新证据与优先级，未创建重复待办。'
+                });
+              } else {
+                tasksDb.value.push({
+                  id: 'task_' + (tasksDb.value.length + 1),
+                  conversation_id: 'app_1',
+                  candidateName: '张小明',
+                  positionTitle: '高级算法工程师',
+                  owner_user_name: '我',
+                  task_type: 'confirm_interview_information',
+                  priority: 'high',
+                  status: 'pending',
+                  dedupe_key: dedupeKey,
+                  rationale: '候选人紧急申请将面试提前至今天下午 4 点，需立即协调面试官时间并答复。',
+                  due_at: '2026-07-15 20:00',
+                  evidence_text: newMsgText,
+                  evidence_message_ids: [msgId],
+                  notes: []
+                });
+              }
+
+              ElementPlus.ElNotification({
+                title: 'AI 待办提醒',
+                message: '同一未完成面试确认事项已更新原待办（幂等 upsert），未重复创建。',
+                type: 'warning',
+                duration: 5000
+              });
+            }
+          }, 3000); // 3 seconds delay to simulate asynchronous model inference
+        };
+
+        const sendCandidateMessage = () => {
+          if (!candidateInput.value.trim()) return;
+          
+          const text = candidateInput.value.trim();
+          const appId = selectedAppId.value;
+          const msgId = 'msg_' + (Math.floor(Math.random() * 1000) + 100);
+          const timeStr = formatDateTime(new Date());
+
+          // Append message to DB
+          messagesDb.value[appId].push({
+            id: msgId,
+            sender_type: 'candidate',
+            content: text,
+            created_at: timeStr
+          });
+
+          candidateInput.value = '';
+          scrollToBottom(candidateChatList);
+
+          // Trigger simulated AI background worker
+          triggerAIWorker(appId, text, msgId);
+        };
+
+
+        // ==========================================
+        // 2. HR WORKSTATION LOGIC (HR 工作台逻辑)
+        // ==========================================
+        const activeSessionId = ref('app_1');
+        const hrSessionSearch = ref('');
+        const hrInput = ref('');
+        const hrChatList = ref(null);
+        const highlightedMessageId = ref(null);
+
+        const activeSession = computed(() => {
+          return hrSessions.value.find(s => s.id === activeSessionId.value);
+        });
+
+        const activeSessionMessages = computed(() => {
+          return messagesDb.value[activeSessionId.value] || [];
+        });
+
+        const activeSessionInsight = computed(() => {
+          return insightsDb.value[activeSessionId.value] || {
+            version: 0,
+            updated_at: '-',
+            summary: '暂无摘要',
+            latest_change: '',
+            intent: 'other',
+            communication_stage: 'waiting_candidate_reply',
+            confirmed_facts: [],
+            candidate_requests: [],
+            candidate_commitments: [],
+            risks: [],
+            next_step: '无',
+            confidence: 0
+          };
+        });
+
+        const activeSessionTasks = computed(() => {
+          return tasksDb.value.filter(t => t.conversation_id === activeSessionId.value && t.status !== 'done' && t.status !== 'closed');
+        });
+
+        const unreadConversationsCount = computed(() => {
+          return hrSessions.value.filter(s => s.unread).length;
+        });
+
+        const pendingTasksCount = computed(() => {
+          return tasksDb.value.filter(t => t.status === 'pending' || t.status === 'in_progress').length;
+        });
+
+        const filteredHRSessions = computed(() => {
+          if (!hrSessionSearch.value.trim()) return hrSessions.value;
+          const k = hrSessionSearch.value.toLowerCase();
+          return hrSessions.value.filter(s => 
+            s.candidateName.toLowerCase().includes(k) || 
+            s.positionTitle.toLowerCase().includes(k)
+          );
+        });
+
+        const selectHRSession = (session) => {
+          activeSessionId.value = session.id;
+          session.unread = false; // Mark as read
+          scrollToBottom(hrChatList);
+        };
+
+        const sendHRMessage = () => {
+          if (!hrInput.value.trim()) return;
+          
+          const text = hrInput.value.trim();
+          const appId = activeSessionId.value;
+          const msgId = 'msg_hr_' + (Math.floor(Math.random() * 1000) + 100);
+          const timeStr = formatDateTime(new Date());
+
+          // Append message to DB
+          messagesDb.value[appId].push({
+            id: msgId,
+            sender_type: 'hr',
+            content: text,
+            created_at: timeStr
+          });
+
+          // Update session list
+          const session = hrSessions.value.find(s => s.id === appId);
+          if (session) {
+            session.lastMessageContent = text;
+            session.lastMessageTime = '刚刚';
+          }
+
+          hrInput.value = '';
+          scrollToBottom(hrChatList);
+
+          // Simulate AI structure update (HR message also triggers insight update, e.g. changing stage)
+          setTimeout(() => {
+            if (appId === 'app_1') {
+              activeSessionInsight.value.communication_stage = 'waiting_candidate_reply';
+              activeSessionInsight.value.next_step = '已回复候选人，等待候选人进一步确认面试安排。';
+            }
+          }, 1000);
+        };
+
+        // Evidence Highlighting
+        const locateEvidence = (msgIds) => {
+          if (!msgIds || msgIds.length === 0) return;
+          const targetId = msgIds[0];
+          highlightedMessageId.value = targetId;
+          
+          // Scroll to the message
+          nextTick(() => {
+            const el = document.getElementById(`msg-${targetId}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          });
+
+          // Remove highlight after 3 seconds
+          setTimeout(() => {
+            if (highlightedMessageId.value === targetId) {
+              highlightedMessageId.value = null;
+            }
+          }, 3000);
+        };
+
+        const locateEvidenceFromTask = (task) => {
+          if (!task.evidence_message_ids || task.evidence_message_ids.length === 0) {
+            ElementPlus.ElMessage.info('该任务无直接关联的消息 ID 证据，已通过文本匹配。');
+            return;
+          }
+          taskDetailsVisible.value = false;
+          openConversationFromTask(task);
+          locateEvidence(task.evidence_message_ids);
+        };
+
+        const openConversationFromTask = (task) => {
+          globalView.value = 'hr';
+          hrSubView.value = 'chat';
+          activeSessionId.value = task.conversation_id;
+          const session = hrSessions.value.find(s => s.id === task.conversation_id);
+          if (session) session.unread = false;
+          taskDetailsVisible.value = false;
+          scrollToBottom(hrChatList);
+        };
+
+        // ==========================================
+        // 3. HR TODO CENTER LOGIC (待办中心逻辑)
+        // ==========================================
+        const todoFilters = ref({
+          keyword: '',
+          owner: 'me',
+          taskType: '',
+          status: '',
+          priority: '',
+          position: '',
+          overdueOnly: false
+        });
+
+        const activeTodoFilters = ref({
+          keyword: '',
+          owner: 'me',
+          taskType: '',
+          status: '',
+          priority: '',
+          position: '',
+          overdueOnly: false
+        });
+
+        const todoStats = computed(() => {
+          const now = new Date();
+          return {
+            pending: tasksDb.value.filter(t => t.status === 'pending').length,
+            highPriority: tasksDb.value.filter(t => t.priority === 'high' && t.status !== 'done' && t.status !== 'closed').length,
+            overdue: tasksDb.value.filter(t => isOverdue(t.due_at) && t.status !== 'done' && t.status !== 'closed').length,
+            completed: tasksDb.value.filter(t => t.status === 'done').length
+          };
+        });
+
+        const filteredTasks = computed(() => {
+          const f = activeTodoFilters.value;
+          return tasksDb.value.filter(t => {
+            if (f.owner === 'me' && t.owner_user_name !== '我') return false;
+            if (f.keyword) {
+              const k = f.keyword.toLowerCase();
+              const match = t.candidateName.toLowerCase().includes(k) || 
+                            t.positionTitle.toLowerCase().includes(k) || 
+                            t.rationale.toLowerCase().includes(k) ||
+                            t.evidence_text.toLowerCase().includes(k);
+              if (!match) return false;
+            }
+            if (f.taskType && t.task_type !== f.taskType) return false;
+            if (f.status && t.status !== f.status) return false;
+            if (f.priority && t.priority !== f.priority) return false;
+            if (f.position && t.positionTitle !== f.position) return false;
+            if (f.overdueOnly && !(isOverdue(t.due_at) && t.status !== 'done' && t.status !== 'closed')) return false;
+            return true;
+          });
+        });
+
+        const applyTodoFilters = () => {
+          activeTodoFilters.value = { ...todoFilters.value };
+        };
+
+        const resetTodoFilters = () => {
+          todoFilters.value = { keyword: '', owner: 'me', taskType: '', status: '', priority: '', position: '', overdueOnly: false };
+          activeTodoFilters.value = { keyword: '', owner: 'me', taskType: '', status: '', priority: '', position: '', overdueOnly: false };
+        };
+
+        const changeTaskStatus = (task, newStatus) => {
+          task.status = newStatus;
+          
+          // Add system note
+          const statusLabels = { 'pending': '待处理', 'in_progress': '处理中', 'done': '已完成', 'closed': '已关闭' };
+          if (!task.notes) task.notes = [];
+          task.notes.unshift({
+            time: formatDateTime(new Date()),
+            content: `系统记录：任务状态变更为【${statusLabels[newStatus]}】。`
+          });
+
+          ElementPlus.ElMessage.success(`任务状态已成功更新为：${statusLabels[newStatus]}`);
+        };
+
+        // Task Detail Drawer
+        const taskDetailsVisible = ref(false);
+        const selectedTask = ref(null);
+        const newTaskNote = ref('');
+
+        const openTaskDetails = (task) => {
+          selectedTask.value = task;
+          newTaskNote.value = '';
+          taskDetailsVisible.value = true;
+        };
+
+        const addTaskNote = () => {
+          if (!newTaskNote.value.trim()) return;
+          if (!selectedTask.value.notes) selectedTask.value.notes = [];
+          
+          selectedTask.value.notes.unshift({
+            time: formatDateTime(new Date()),
+            content: newTaskNote.value.trim()
+          });
+          
+          newTaskNote.value = '';
+          ElementPlus.ElMessage.success('处理备注已添加');
+        };
+
+        // Candidate Details Dialog
+        const candidateDetailsVisible = ref(false);
+        const selectedCandidateDetail = ref(null);
+
+        const openCandidateDetails = (session) => {
+          selectedCandidateDetail.value = session;
+          candidateDetailsVisible.value = true;
+        };
+
+        // ==========================================
+        // UTILITY FUNCTIONS (辅助函数)
+        // ==========================================
+        const getStatusTagType = (status) => {
+          const map = {
+            '待面试': 'warning',
+            '简历筛选': 'info',
+            '待初试': 'primary',
+            '录用': 'success',
+            '拒绝': 'danger'
+          };
+          return map[status] || 'info';
+        };
+
+        const getTaskPriorityTagType = (priority) => {
+          const map = { 'high': 'danger', 'medium': 'warning', 'low': 'info' };
+          return map[priority] || 'info';
+        };
+
+        const getTaskPriorityLabel = (priority) => {
+          const map = { 'high': '高', 'medium': '中', 'low': '低' };
+          return map[priority] || priority;
+        };
+
+        const getTaskStatusTagType = (status) => {
+          const map = { 'pending': 'info', 'in_progress': 'warning', 'done': 'success', 'closed': 'danger' };
+          return map[status] || 'info';
+        };
+
+        const getTaskStatusLabel = (status) => {
+          const map = { 'pending': '待处理', 'in_progress': '处理中', 'done': '已完成', 'closed': '已关闭' };
+          return map[status] || status;
+        };
+
+        const getTaskTypeLabel = (type) => {
+          const map = {
+            'reply_candidate': '回复候选人',
+            'confirm_interview_information': '确认面试信息',
+            'follow_up_materials': '跟进补充资料',
+            'review_risk': '人工复核风险'
+          };
+          return map[type] || type;
+        };
+
+        const getIntentLabel = (intent) => {
+          const map = {
+            'salary_consultation': '薪资咨询',
+            'interview_time_negotiation': '面试时间确认',
+            'materials_supplement': '补充资料',
+            'policy_consultation': '政策咨询',
+            'rejection': '拒绝/放弃',
+            'other': '其他未知诉求'
+          };
+          return map[intent] || intent;
+        };
+
+        const getStageLabel = (stage) => {
+          const map = {
+            'waiting_hr_reply': '等待 HR 回复',
+            'waiting_candidate_reply': '等待候选人补充',
+            'confirming_time': '待确认时间',
+            'escalated_to_human': '已转人工',
+            'interview_scheduling': '面试排期中',
+            'completed': '已闭环'
+          };
+          return map[stage] || stage;
+        };
+
+        const isOverdue = (dueDateStr) => {
+          if (!dueDateStr) return false;
+          // Simple string comparison for mock dates
+          const nowStr = '2026-07-15 18:48';
+          return dueDateStr < nowStr;
+        };
+
+        const formatDateTime = (date) => {
+          const y = date.getFullYear();
+          const m = String(date.getMonth() + 1).padStart(2, '0');
+          const d = String(date.getDate()).padStart(2, '0');
+          const h = String(date.getHours()).padStart(2, '0');
+          const min = String(date.getMinutes()).padStart(2, '0');
+          return `${y}-${m}-${d} ${h}:${min}`;
+        };
+
+        const scrollToBottom = (refEl) => {
+          nextTick(() => {
+            if (refEl.value) {
+              refEl.value.scrollTop = refEl.value.scrollHeight;
+            }
+          });
+        };
+
+        const switchGlobalView = (view) => {
+          globalView.value = view;
+          if (view === 'candidate') {
+            scrollToBottom(candidateChatList);
+          } else if (view === 'hr' && hrSubView.value === 'chat') {
+            scrollToBottom(hrChatList);
+          }
+        };
+
+        const switchHRSubView = (view) => {
+          hrSubView.value = view;
+          if (view === 'chat') {
+            scrollToBottom(hrChatList);
+          }
+        };
+
+        return {
+          globalView,
+          hrSubView,
+          candidateLoggedIn,
+          loginLoading,
+          countdown,
+          loginForm,
+          loginRules,
+          candidateApplications,
+          selectedAppId,
+          activeApp,
+          activeAppMessages,
+          candidateInput,
+          candidateChatList,
+          sendVerificationCode,
+          handleCandidateLogin,
+          handleCandidateLogout,
+          selectCandidateApplication,
+          fillCandidateDemoMessage,
+          sendCandidateMessage,
+          aiAnalyzing,
+          
+          activeSessionId,
+          hrSessionSearch,
+          hrInput,
+          hrChatList,
+          highlightedMessageId,
+          activeSession,
+          activeSessionMessages,
+          activeSessionInsight,
+          activeSessionTasks,
+          unreadConversationsCount,
+          pendingTasksCount,
+          filteredHRSessions,
+          selectHRSession,
+          sendHRMessage,
+          locateEvidence,
+          locateEvidenceFromTask,
+          openConversationFromTask,
+          
+          todoFilters,
+          todoStats,
+          filteredTasks,
+          applyTodoFilters,
+          resetTodoFilters,
+          changeTaskStatus,
+          
+          taskDetailsVisible,
+          selectedTask,
+          newTaskNote,
+          openTaskDetails,
+          addTaskNote,
+          
+          candidateDetailsVisible,
+          selectedCandidateDetail,
+          openCandidateDetails,
+          
+          getStatusTagType,
+          getTaskPriorityTagType,
+          getTaskPriorityLabel,
+          getTaskStatusTagType,
+          getTaskStatusLabel,
+          getTaskTypeLabel,
+          getIntentLabel,
+          getStageLabel,
+          isOverdue,
+          switchGlobalView,
+          switchHRSubView
+        };
+      }
+    });
+
+    // Register all Element Plus Icons
+    for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+      app.component(key, component);
+    }
+
+    app.use(ElementPlus);
+    app.mount('#app');
+  </script>
+</body>
+</html>

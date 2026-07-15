@@ -1,7 +1,15 @@
 import pytest
 
-from rag.retrieval_types import RetrievalMode, RetrievalRequest, RetrievalSource
-from rag.retrievers.milvus_hybrid_retriever import MilvusHybridRetriever
+from rag.retrieval_types import (
+    RetrievalMode,
+    RetrievalRequest,
+    RetrievalSource,
+    SearchRequest,
+)
+from rag.retrievers.milvus_hybrid_retriever import (
+    MilvusCollectionSchema,
+    MilvusHybridRetriever,
+)
 
 
 class FakeEmbeddingService:
@@ -57,6 +65,27 @@ class SparseScoreMilvusClient(FakeMilvusClient):
         ]]
 
 
+class KnowledgeMilvusClient(FakeMilvusClient):
+    """模拟字段名不同于候选人画像的知识库 Collection。"""
+
+    def search(self, **kwargs):
+        self.search_calls.append(kwargs)
+        return [[self._build_hit("chunk-1", 0.88)]]
+
+    @staticmethod
+    def _build_hit(chunk_id, distance):
+        return {
+            "id": chunk_id,
+            "distance": distance,
+            "entity": {
+                "chunk_id": chunk_id,
+                "content": "第三章 年假规则：工作满一年可享受年休假。",
+                "document_id": "leave-policy-v1",
+                "section_path": "第三章 > 年假规则",
+            },
+        }
+
+
 def build_request():
     return RetrievalRequest(
         query="Python FastAPI",
@@ -64,6 +93,7 @@ def build_request():
         dense_recall_k=12,
         sparse_recall_k=15,
         hybrid_limit=10,
+        rrf_k=80,
     )
 
 
@@ -83,7 +113,7 @@ async def test_dense_mode_builds_dense_vector_search():
     assert milvus_client.search_calls[0]["search_params"] == {"metric_type": "COSINE"}
     assert milvus_client.search_calls[0]["limit"] == 12
     assert milvus_client.search_calls[0]["filter"] == 'department_id in ["department-1"]'
-    assert hits[0].candidate_id == "candidate-1"
+    assert hits[0].entity_id == "candidate-1"
     assert hits[0].rank_source == RetrievalSource.DENSE
     assert hits[0].metadata["profile_version"] == 2
 
@@ -142,8 +172,9 @@ async def test_hybrid_mode_builds_two_requests_with_same_filter():
     assert sparse_request.limit == 15
     assert dense_request.filter == sparse_request.filter == 'department_id in ["department-1"]'
     assert type(call["ranker"]).__name__ == "RRFRanker"
+    assert call["ranker"].dict()["params"]["k"] == 80
     assert call["limit"] == 10
-    assert hits[0].candidate_id == "candidate-2"
+    assert hits[0].entity_id == "candidate-2"
     assert hits[0].rank_source == RetrievalSource.HYBRID
 
 
@@ -156,3 +187,38 @@ async def test_dense_mode_rejects_wrong_embedding_dimension():
 
     with pytest.raises(ValueError, match="Embedding维度不匹配"):
         await retriever.retrieve(build_request(), mode=RetrievalMode.DENSE)
+
+
+@pytest.mark.asyncio
+async def test_custom_collection_schema_controls_milvus_fields_and_result_mapping():
+    """非候选人 Collection 可复用同一召回器，且不读取候选人固定字段。"""
+
+    schema = MilvusCollectionSchema(
+        collection_name="recruiting_policy_chunks_v1",
+        primary_key_field="chunk_id",
+        text_field="content",
+        vector_dim=4,
+    )
+    milvus_client = KnowledgeMilvusClient()
+    retriever = MilvusHybridRetriever(
+        embedding_service=FakeEmbeddingService(vector_size=4),
+        milvus_client=milvus_client,
+        collection_schema=schema,
+    )
+    request = SearchRequest(
+        query="年假如何计算",
+        output_fields=("chunk_id", "content", "document_id", "section_path"),
+    )
+
+    hits = await retriever.retrieve(request, mode=RetrievalMode.DENSE)
+
+    call = milvus_client.search_calls[0]
+    assert call["collection_name"] == "recruiting_policy_chunks_v1"
+    assert call["anns_field"] == "dense_vector"
+    assert call["output_fields"] == ["chunk_id", "content", "document_id", "section_path"]
+    assert hits[0].entity_id == "chunk-1"
+    assert hits[0].text == "第三章 年假规则：工作满一年可享受年休假。"
+    assert hits[0].metadata == {
+        "document_id": "leave-policy-v1",
+        "section_path": "第三章 > 年假规则",
+    }

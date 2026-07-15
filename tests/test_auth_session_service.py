@@ -6,8 +6,8 @@ import pytest
 from fastapi import HTTPException
 
 from core.auth import AuthHandler
-from iam.services.auth_session_service import AuthSessionService, SessionValidationError
-from models.user import UserStatus
+from iam.services.auth_session_service import AuthSessionService, PasswordChangeError, SessionValidationError
+from models.user import UserModel, UserStatus
 from settings import settings
 
 
@@ -122,3 +122,38 @@ async def test_refresh_rotation_revokes_all_sessions_when_old_refresh_is_reused(
     with pytest.raises(SessionValidationError, match="失效"):
         await service.rotate_refresh_token(original["refresh_claims"])
     assert session_repo.revoke_calls == [(user.id, "refresh_token_reuse")]
+
+
+@pytest.mark.asyncio
+async def test_change_my_password_requires_current_password_and_revokes_sessions():
+    user = UserModel(
+        id="user-1",
+        username="test.user",
+        email="test.user@example.com",
+        realname="Test User",
+        password="OldPassword!2026",
+        status=UserStatus.ACTIVE,
+        authz_version=3,
+    )
+    session = FakeSession()
+    service = AuthSessionService(session)
+    session_repo = FakeSessionRepo(None)
+    service.session_repo = session_repo
+
+    with pytest.raises(PasswordChangeError, match="当前密码"):
+        await service.change_my_password(
+            user=user,
+            current_password="WrongPassword!2026",
+            new_password="NewPassword!2026",
+        )
+
+    await service.change_my_password(
+        user=user,
+        current_password="OldPassword!2026",
+        new_password="NewPassword!2026",
+    )
+
+    assert user.check_password("NewPassword!2026")
+    assert user.authz_version == 4
+    assert session_repo.revoke_calls == [(user.id, "password_changed")]
+    assert {item.action for item in session.added} >= {"session.revoke_all", "user.password.change"}

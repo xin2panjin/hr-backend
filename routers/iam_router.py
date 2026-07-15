@@ -29,7 +29,7 @@ from iam.services.invitation_service import (
     InvitationService,
     InvitationValidationError,
 )
-from iam.services.auth_session_service import AuthSessionService
+from iam.services.auth_session_service import AuthSessionService, PasswordChangeError
 from iam.services.password_policy import PasswordPolicyError
 from iam.permissions import PERMISSION_VIEW_GROUPS, PERMISSION_VIEW_METADATA, PermissionCode
 from models import AsyncSession
@@ -61,6 +61,7 @@ from schemas.iam_schema import (
     UserRoleRevokeSchema,
     UserRoleSchema,
     UserRoleScopeReplaceSchema,
+    MyPasswordChangeSchema,
     UserPasswordResetSchema,
     UserProfileUpdateSchema,
 )
@@ -372,6 +373,23 @@ async def revoke_my_session(
         )
     if not revoked:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在或已失效")
+
+
+@router.post("/me/change-password", status_code=status.HTTP_204_NO_CONTENT, summary="当前用户修改密码")
+async def change_my_password(
+    payload: MyPasswordChangeSchema,
+    current_user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session_instance),
+):
+    try:
+        async with session.begin():
+            await AuthSessionService(session).change_my_password(
+                user=current_user,
+                current_password=payload.current_password,
+                new_password=payload.new_password,
+            )
+    except (PasswordChangeError, PasswordPolicyError) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
 
 @router.post("/invitations", response_model=IamInvitationSchema, status_code=status.HTTP_201_CREATED, summary="创建带初始角色的持久化邀请")

@@ -3,37 +3,44 @@
     "case_id": "exact_tech_skills",
     "query": "Python FastAPI Milvus",
     "focus": "BM25 对技术栈精确词的召回能力",
-    "top_k": 10
+    "top_k": 10,
+    "relevant_candidate_ids": ["GKc2apTs2jtaepsUNw8Xnr"]
   },
   {
     "case_id": "semantic_rag_experience",
     "query": "做过知识库问答、智能客服或企业智能问答平台的人",
     "focus": "Dense 对相近项目描述的语义召回能力",
-    "top_k": 10
+    "top_k": 10,
+    "relevant_candidate_ids": ["GKc2apTs2jtaepsUNw8Xnr", "4ewbFk9i6UhvgXn37HXKWK", "E4FpRGyCBXQamCveostQ2k", "FjfdMBUYZKVN9b3Gr5onQg", "PiTFyykZWCUvyhdRZXchhs", "bGqycEjyAATbL7iuPMbzjw", "ii8ekRvhgDzTrvrbF78Jb7", "j8Bj9K9EvPSTtwRkG5K9Mr", "oKNBtAVhzqThZqqCNx7y2x"]
   },
   {
     "case_id": "backend_risk_experience",
     "query": "有风控平台经验的后端工程师",
     "focus": "Hybrid 对岗位语义和领域关键词的融合能力",
-    "top_k": 10
+    "top_k": 10,
+    "relevant_candidate_ids": ["4ewbFk9i6UhvgXn37HXKWK", "E4FpRGyCBXQamCveostQ2k", "FjfdMBUYZKVN9b3Gr5onQg", "PiTFyykZWCUvyhdRZXchhs", "bGqycEjyAATbL7iuPMbzjw", "ii8ekRvhgDzTrvrbF78Jb7", "j8Bj9K9EvPSTtwRkG5K9Mr", "oKNBtAVhzqThZqqCNx7y2x"]
   },
   {
     "case_id": "acronym_rag",
     "query": "RAG",
     "focus": "英文技术缩写的分词和精确词命中",
-    "top_k": 10
+    "top_k": 10,
+    "relevant_candidate_ids": ["GKc2apTs2jtaepsUNw8Xnr", "4ewbFk9i6UhvgXn37HXKWK", "E4FpRGyCBXQamCveostQ2k", "FjfdMBUYZKVN9b3Gr5onQg", "PiTFyykZWCUvyhdRZXchhs", "bGqycEjyAATbL7iuPMbzjw", "ii8ekRvhgDzTrvrbF78Jb7", "j8Bj9K9EvPSTtwRkG5K9Mr", "oKNBtAVhzqThZqqCNx7y2x", "ki7oZDvUXTUD2UDhTrCPEh"]
   },
   {
     "case_id": "status_filter",
-    "query": "Python 后端工程师",
+    "query": "AI工程师",
     "focus": "候选人状态过滤与 SQL 二次复核",
-    "status": "已投递",
-    "top_k": 10
+    "status": "AI筛选通过",
+    "top_k": 10,
+    "relevant_candidate_ids": ["GKc2apTs2jtaepsUNw8Xnr", "oKNBtAVhzqThZqqCNx7y2x"]
   },
   {
     "case_id": "empty_result",
     "query": "具备量子计算编译器生产实践经验的人",
     "focus": "低相关或无结果查询的稳定性",
-    "top_k": 10
+    "top_k": 10,
+    "relevant_candidate_ids": [],
+    "expect_empty_result": true
   }
 ]

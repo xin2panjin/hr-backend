@@ -219,6 +219,10 @@ class UserPasswordResetSchema(BaseModel):
     new_password: str = Field(min_length=12, max_length=128)
 
 
+class MyPasswordChangeSchema(UserPasswordResetSchema):
+    current_password: str = Field(min_length=1, max_length=128)
+
+
 class AuthSessionSchema(BaseModel):
     id: str
     created_at: datetime

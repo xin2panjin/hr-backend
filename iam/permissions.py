@@ -39,6 +39,8 @@ class PermissionCode(StrEnum):
     RESUME_PARSE = "resume.parse"
     TALENT_SEARCH_QUERY = "talent_search.query"
     ASSISTANT_USE = "assistant.use"
+    CANDIDATE_COMMUNICATION_USE = "candidate.communication.use"
+    KNOWLEDGE_DOCUMENT_MANAGE = "knowledge.document_manage"
 
 
 class RoleCode(StrEnum):
@@ -72,6 +74,7 @@ PERMISSION_VIEW_GROUPS = {
     "resume": ("简历管理", 50),
     "talent_search": ("人才搜索", 60),
     "assistant": ("招聘助手", 70),
+    "knowledge": ("知识库管理", 75),
     "audit": ("审计与安全", 80),
 }
 
@@ -100,6 +103,11 @@ PERMISSION_VIEW_METADATA = {
     PermissionCode.RESUME_PARSE: ("解析简历", "发起简历解析"),
     PermissionCode.TALENT_SEARCH_QUERY: ("检索人才", "使用人才库检索能力"),
     PermissionCode.ASSISTANT_USE: ("使用招聘助手", "使用招聘智能助手"),
+    PermissionCode.CANDIDATE_COMMUNICATION_USE: ("使用候选人沟通", "查看候选人会话、洞察和待办"),
+    PermissionCode.KNOWLEDGE_DOCUMENT_MANAGE: (
+        "管理制度知识库",
+        "上传、重建、归档企业制度文档并查看索引状态",
+    ),
     PermissionCode.AUDIT_READ: ("查看审计日志", "查看敏感操作和权限变更记录"),
 }
 
@@ -134,6 +142,8 @@ SYSTEM_ROLE_DEFINITIONS = (
                 PermissionCode.RESUME_PARSE,
                 PermissionCode.TALENT_SEARCH_QUERY,
                 PermissionCode.ASSISTANT_USE,
+                PermissionCode.CANDIDATE_COMMUNICATION_USE,
+                PermissionCode.KNOWLEDGE_DOCUMENT_MANAGE,
             }
         ),
     ),
@@ -153,6 +163,7 @@ SYSTEM_ROLE_DEFINITIONS = (
                 PermissionCode.RESUME_PARSE,
                 PermissionCode.TALENT_SEARCH_QUERY,
                 PermissionCode.ASSISTANT_USE,
+                PermissionCode.CANDIDATE_COMMUNICATION_USE,
             }
         ),
     ),
@@ -172,6 +183,7 @@ SYSTEM_ROLE_DEFINITIONS = (
                 PermissionCode.RESUME_UPLOAD,
                 PermissionCode.RESUME_PARSE,
                 PermissionCode.TALENT_SEARCH_QUERY,
+                PermissionCode.CANDIDATE_COMMUNICATION_USE,
             }
         ),
     ),

@@ -5,21 +5,21 @@ from rag.rerankers import (
     DashScopeNativeReranker,
     NoopReranker,
 )
-from rag.retrieval_types import RetrievalHit, RetrievalSource
+from rag.retrieval_types import RetrievalSource, SearchHit
 
 
 def build_hits():
     return [
-        RetrievalHit(
-            candidate_id="candidate-1",
+        SearchHit(
+            entity_id="candidate-1",
             score=0.03,
-            profile_text="Python 后端和知识库问答经验",
+            text="Python 后端和知识库问答经验",
             rank_source=RetrievalSource.HYBRID,
         ),
-        RetrievalHit(
-            candidate_id="candidate-2",
+        SearchHit(
+            entity_id="candidate-2",
             score=0.02,
-            profile_text="FastAPI 与 Milvus 项目经验",
+            text="FastAPI 与 Milvus 项目经验",
             rank_source=RetrievalSource.HYBRID,
         ),
     ]
@@ -76,7 +76,7 @@ async def test_cohere_compatible_adapter_reorders_by_api_relevance_score():
 
     result = await reranker.rerank(query="找 Milvus 工程师", hits=build_hits())
 
-    assert [hit.candidate_id for hit in result] == ["candidate-2", "candidate-1"]
+    assert [hit.entity_id for hit in result] == ["candidate-2", "candidate-1"]
     assert result[0].score == 0.94
     assert client.calls[0][1]["json"] == {
         "model": "qwen3-rerank",
@@ -108,7 +108,7 @@ async def test_dashscope_native_adapter_supports_nested_protocol():
 
     result = await reranker.rerank(query="Python", hits=build_hits())
 
-    assert [hit.candidate_id for hit in result] == ["candidate-1", "candidate-2"]
+    assert [hit.entity_id for hit in result] == ["candidate-1", "candidate-2"]
     assert client.calls[0][1]["json"] == {
         "model": "bge-reranker-v2-m3",
         "input": {

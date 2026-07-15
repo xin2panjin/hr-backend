@@ -281,3 +281,188 @@ def test_build_thread_id_contains_user_and_conversation():
     assert HRAssistantConversationService.build_thread_id("hr-1", "conversation-1") == (
         "hr-assistant:hr-1:conversation-1"
     )
+
+
+def test_knowledge_source_artifact_is_persisted_and_audited_without_candidate_ids():
+    messages = [
+        SimpleNamespace(type="human", content="年假怎么计算"),
+        SimpleNamespace(
+            type="tool",
+            name="search_recruiting_knowledge",
+            content=json.dumps(
+                {
+                    "artifact_type": "knowledge_sources",
+                    "sources": [
+                        {
+                            "source_id": "chunk-1",
+                            "title": "员工休假管理制度",
+                            "section_path": "第三章 > 年假",
+                            "page_number": 5,
+                            "content": "年假规则",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+        ),
+        SimpleNamespace(type="ai", content="根据员工休假管理制度第三章回答。"),
+    ]
+
+    service = HRAssistantConversationService()
+    artifacts = service._extract_artifacts(messages[1:])
+    summaries = service._extract_tool_summaries(messages[1:])
+
+    assert artifacts[0]["type"] == "knowledge_sources"
+    assert artifacts[0]["sources"][0]["source_id"] == "chunk-1"
+    assert summaries[0]["content"] == "工具 search_recruiting_knowledge 已执行，命中 1 个制度来源"
+    assert summaries[0]["metadata"] == {
+        "artifact_type": "knowledge_sources",
+        "candidate_ids": [],
+        "source_ids": ["chunk-1"],
+    }
+
+
+def test_knowledge_source_artifacts_merge_duplicate_sources_within_current_turn():
+    service = HRAssistantConversationService()
+    messages = [
+        SimpleNamespace(
+            type="tool",
+            content=json.dumps(
+                {
+                    "artifact_type": "knowledge_sources",
+                    "sources": [
+                        {"source_id": "chunk-1", "title": "招聘制度", "content": None},
+                        {"source_id": "chunk-2", "title": "招聘制度", "content": "第二条"},
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+        ),
+        SimpleNamespace(
+            type="tool",
+            content=json.dumps(
+                {
+                    "artifact_type": "knowledge_sources",
+                    "sources": [
+                        {"source_id": "chunk-1", "title": "招聘制度", "content": "第一条"},
+                        {"source_id": "chunk-2", "title": "招聘制度", "content": "第二条"},
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+        ),
+    ]
+
+    artifacts = service._extract_artifacts(messages)
+
+    assert len(artifacts) == 1
+    assert artifacts[0]["type"] == "knowledge_sources"
+    assert [source["source_id"] for source in artifacts[0]["sources"]] == ["chunk-1", "chunk-2"]
+    assert artifacts[0]["sources"][0]["content"] == "第一条"
+
+
+def test_tool_stream_events_deduplicate_repeated_updates_without_tool_call_id():
+    service = HRAssistantConversationService()
+    started_tool_call_ids: set[str] = set()
+    completed_tool_call_ids: set[str] = set()
+    start_payload = {
+        "model": {
+            "messages": [
+                SimpleNamespace(
+                    type="ai",
+                    tool_calls=[{"name": "search_recruiting_knowledge", "args": {"query": "招聘流程"}}],
+                )
+            ]
+        }
+    }
+    end_payload = {
+        "tools": {
+            "messages": [
+                SimpleNamespace(
+                    type="tool",
+                    name="search_recruiting_knowledge",
+                    content='{"artifact_type":"knowledge_sources"}',
+                )
+            ]
+        }
+    }
+
+    first_start = service._extract_tool_stream_events(
+        payload=start_payload,
+        started_tool_call_ids=started_tool_call_ids,
+        completed_tool_call_ids=completed_tool_call_ids,
+    )
+    repeated_start = service._extract_tool_stream_events(
+        payload=start_payload,
+        started_tool_call_ids=started_tool_call_ids,
+        completed_tool_call_ids=completed_tool_call_ids,
+    )
+    first_end = service._extract_tool_stream_events(
+        payload=end_payload,
+        started_tool_call_ids=started_tool_call_ids,
+        completed_tool_call_ids=completed_tool_call_ids,
+    )
+    repeated_end = service._extract_tool_stream_events(
+        payload=end_payload,
+        started_tool_call_ids=started_tool_call_ids,
+        completed_tool_call_ids=completed_tool_call_ids,
+    )
+
+    assert [event["event"] for event in first_start] == ["tool_start"]
+    assert repeated_start == []
+    assert [event["event"] for event in first_end] == ["tool_end"]
+    assert repeated_end == []
+
+
+def test_cross_tool_artifacts_are_isolated_to_current_turn():
+    service = HRAssistantConversationService()
+    messages = [
+        SimpleNamespace(type="human", content="先找一个 Python 候选人"),
+        SimpleNamespace(
+            type="tool",
+            content=json.dumps(
+                {
+                    "artifact_type": "candidate_cards",
+                    "candidates": [{"candidate_id": "old-candidate", "name": "旧候选人"}],
+                },
+                ensure_ascii=False,
+            ),
+        ),
+        SimpleNamespace(type="human", content="再告诉我年假怎么计算"),
+        SimpleNamespace(
+            type="tool",
+            content=json.dumps(
+                {
+                    "artifact_type": "candidate_cards",
+                    "candidates": [{"candidate_id": "new-candidate", "name": "新候选人"}],
+                },
+                ensure_ascii=False,
+            ),
+        ),
+        SimpleNamespace(
+            type="tool",
+            content=json.dumps(
+                {
+                    "artifact_type": "knowledge_sources",
+                    "sources": [{"source_id": "policy-chunk-1", "title": "休假制度"}],
+                },
+                ensure_ascii=False,
+            ),
+        ),
+        SimpleNamespace(type="ai", content="候选人和制度来源已分别整理。"),
+    ]
+
+    current_turn = service._get_current_turn_messages(messages)
+    artifacts = service._extract_artifacts(current_turn)
+
+    assert [artifact["type"] for artifact in artifacts] == [
+        "candidate_cards",
+        "knowledge_sources",
+    ]
+    assert artifacts[0]["candidates"][0]["candidate_id"] == "new-candidate"
+    assert artifacts[1]["sources"][0]["source_id"] == "policy-chunk-1"
+    assert all(
+        candidate["candidate_id"] != "old-candidate"
+        for artifact in artifacts
+        for candidate in artifact.get("candidates", [])
+    )

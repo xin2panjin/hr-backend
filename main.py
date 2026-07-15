@@ -15,6 +15,10 @@ from routers.talent_search_router import router as talent_search_router
 from routers.hr_assistant_router import router as hr_assistant_router
 from routers.assistant_router import router as assistant_router
 from routers.iam_router import router as iam_router
+from routers.knowledge_router import router as knowledge_router
+from routers.candidate_portal_router import router as candidate_portal_router
+from routers.candidate_communication_router import router as candidate_communication_router
+from scheduler.candidate_communication import start_candidate_communication_scheduler
 
 from loguru import logger
 
@@ -43,17 +47,20 @@ async def lifespan(_: FastAPI):
     cache_backend = RedisBackend(redis_client)
     FastAPICache.init(cache_backend, prefix="fastapi-cache")
 
-    bot = scheduler = None
+    bot = email_scheduler = None
+    candidate_insight_scheduler = await start_candidate_communication_scheduler()
     if settings.ENABLE_EMAIL_POLLING:
-        bot, scheduler = await start_email_polling()
+        bot, email_scheduler = await start_email_polling()
 
     yield
     # 2. yield之后的代码，是程序即将退出之前执行的
     await redis_client.close()
     if bot and bot.is_connected:
         await bot.close()
-    if scheduler and scheduler.running:
-        await scheduler.shutdown()
+    if email_scheduler and email_scheduler.running:
+        await email_scheduler.shutdown()
+    if candidate_insight_scheduler.running:
+        await candidate_insight_scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -70,6 +77,8 @@ app.include_router(user_router)
 app.include_router(iam_router)
 app.include_router(position_router)
 app.include_router(candidate_router)
+app.include_router(candidate_portal_router)
+app.include_router(candidate_communication_router)
 app.include_router(dashboard_router)
 if settings.DEBUG:
     from routers.dev_router import router as dev_router
@@ -86,3 +95,4 @@ app.include_router(talent_search_router)
 
 app.include_router(hr_assistant_router)
 app.include_router(assistant_router)
+app.include_router(knowledge_router)

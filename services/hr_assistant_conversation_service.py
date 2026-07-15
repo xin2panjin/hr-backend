@@ -369,7 +369,7 @@ class HRAssistantConversationService:
                 if message_type in {"ai", "assistant"}:
                     for tool_call in getattr(message, "tool_calls", []) or []:
                         tool_name = tool_call.get("name", "unknown_tool")
-                        call_id = tool_call.get("id") or f"{tool_name}:{len(started_tool_call_ids)}"
+                        call_id = tool_call.get("id") or cls._tool_start_fallback_key(tool_call)
                         if call_id in started_tool_call_ids:
                             continue
                         started_tool_call_ids.add(call_id)
@@ -384,7 +384,7 @@ class HRAssistantConversationService:
                         )
                 elif message_type == "tool":
                     tool_name = getattr(message, "name", None) or "unknown_tool"
-                    call_id = getattr(message, "tool_call_id", None) or f"{tool_name}:{len(completed_tool_call_ids)}"
+                    call_id = getattr(message, "tool_call_id", None) or cls._tool_end_fallback_key(message)
                     if call_id in completed_tool_call_ids:
                         continue
                     completed_tool_call_ids.add(call_id)
@@ -400,12 +400,35 @@ class HRAssistantConversationService:
         return events
 
     @staticmethod
+    def _tool_start_fallback_key(tool_call: dict) -> str:
+        """为缺失 tool_call_id 的模型更新生成可重复计算的去重键。"""
+
+        tool_name = tool_call.get("name", "unknown_tool")
+        arguments = tool_call.get("args", tool_call.get("arguments", {}))
+        serialized_arguments = json.dumps(
+            arguments,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+        return f"{tool_name}:start:{serialized_arguments}"
+
+    @staticmethod
+    def _tool_end_fallback_key(message: Any) -> str:
+        """为缺失 tool_call_id 的工具更新生成稳定的去重键。"""
+
+        tool_name = getattr(message, "name", None) or "unknown_tool"
+        content = getattr(message, "content", "")
+        return f"{tool_name}:end:{content if isinstance(content, str) else str(content)}"
+
+    @staticmethod
     def _tool_display_name(tool_name: str, *, started: bool) -> str:
         """返回不含候选人数据的前端过程提示。"""
 
         action = "正在" if started else "已完成"
         tool_display_map = {
             "search_talent_pool": "检索人才库",
+            "search_recruiting_knowledge": "检索企业制度",
             "get_candidate_detail": "获取候选人详情",
             "compare_candidates": "对比候选人",
         }
@@ -446,6 +469,8 @@ class HRAssistantConversationService:
         """从工具结果提取前端卡片，不保存模型内部消息。"""
 
         artifacts: list[dict] = []
+        knowledge_artifact: dict | None = None
+        knowledge_sources_by_id: dict[str, dict] = {}
         for message in messages:
             if getattr(message, "type", None) != "tool":
                 continue
@@ -489,6 +514,33 @@ class HRAssistantConversationService:
                         "raw": payload,
                     }
                 )
+            elif artifact_type == "knowledge_sources":
+                if knowledge_artifact is None:
+                    knowledge_artifact = {
+                        "type": "knowledge_sources",
+                        "title": "制度知识来源",
+                        "sources": [],
+                        "raw": {**payload, "sources": []},
+                    }
+                    artifacts.append(knowledge_artifact)
+                for source in payload.get("sources", []):
+                    if not isinstance(source, dict):
+                        continue
+                    source_id = source.get("source_id")
+                    if not source_id:
+                        continue
+                    existing_source = knowledge_sources_by_id.get(source_id)
+                    if existing_source is None:
+                        copied_source = dict(source)
+                        knowledge_sources_by_id[source_id] = copied_source
+                        knowledge_artifact["sources"].append(copied_source)
+                        knowledge_artifact["raw"]["sources"].append(copied_source)
+                        continue
+                    # 同一来源经不同检索路径再次命中时，保留首次排序位置，
+                    # 但用后续返回的非空字段（尤其正文）补全它。
+                    for field, value in source.items():
+                        if not existing_source.get(field) and value:
+                            existing_source[field] = value
         return artifacts
 
     @staticmethod
@@ -524,14 +576,24 @@ class HRAssistantConversationService:
             payload = cls._parse_tool_payload(getattr(message, "content", None)) or {}
             candidate_ids = cls._candidate_ids_from_payload(payload)
             tool_name = getattr(message, "name", None) or "unknown_tool"
+            source_ids = [
+                source.get("source_id")
+                for source in payload.get("sources", [])
+                if isinstance(source, dict) and source.get("source_id")
+            ]
+            result_count = len(source_ids) if payload.get("artifact_type") == "knowledge_sources" else len(candidate_ids)
+            result_label = "制度来源" if payload.get("artifact_type") == "knowledge_sources" else "候选人"
+            metadata = {
+                "artifact_type": payload.get("artifact_type"),
+                "candidate_ids": candidate_ids,
+            }
+            if source_ids:
+                metadata["source_ids"] = source_ids
             summaries.append(
                 {
                     "tool_name": tool_name,
-                    "content": f"工具 {tool_name} 已执行，命中 {len(candidate_ids)} 位候选人",
-                    "metadata": {
-                        "artifact_type": payload.get("artifact_type"),
-                        "candidate_ids": candidate_ids,
-                    },
+                    "content": f"工具 {tool_name} 已执行，命中 {result_count} 个{result_label}",
+                    "metadata": metadata,
                 }
             )
         return summaries
