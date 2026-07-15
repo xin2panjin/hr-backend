@@ -7,14 +7,21 @@ from agents.hr_assistant.tools.knowledge_search import (
     search_recruiting_knowledge,
 )
 from agents.hr_assistant.tools import HR_ASSISTANT_TOOLS
-from routers.hr_assistant_router import (
-    _extract_hr_assistant_artifacts,
-    _get_current_turn_messages,
-)
 from models.candidate import CandidateStatusEnum
+from services.hr_assistant_conversation_service import HRAssistantConversationService
 from types import SimpleNamespace
 import json
 import pytest
+
+
+def _extract_hr_assistant_artifacts(messages):
+    """兼容旧兼容层测试：产物提取已下沉到会话服务。"""
+
+    return HRAssistantConversationService._extract_artifacts(messages)
+
+
+def _get_current_turn_messages(messages):
+    return HRAssistantConversationService._get_current_turn_messages(messages)
 
 
 def test_parse_status_by_value():

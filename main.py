@@ -12,7 +12,6 @@ from scheduler import start_email_polling
 from routers.dashboard_router import router as dashboard_router
 from routers.media_router import router as media_router
 from routers.talent_search_router import router as talent_search_router
-from routers.hr_assistant_router import router as hr_assistant_router
 from routers.assistant_router import router as assistant_router
 from routers.iam_router import router as iam_router
 from routers.knowledge_router import router as knowledge_router
@@ -93,6 +92,5 @@ async def root():
 
 app.include_router(talent_search_router)
 
-app.include_router(hr_assistant_router)
 app.include_router(assistant_router)
 app.include_router(knowledge_router)
