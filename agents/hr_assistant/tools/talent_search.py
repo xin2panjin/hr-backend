@@ -5,10 +5,10 @@ from langchain.tools import ToolRuntime, tool
 from models import AsyncSessionFactory
 from models.candidate import CandidateStatusEnum
 from repository.candidate_repo import CandidateRepo
-from repository.user_repo import UserRepo
 from services.talent_search_service import TalentSearchService
 
 from ..state import HRAssistantState
+from .user_context import load_user_with_active_roles
 
 
 def _parse_status(status: str | None) -> CandidateStatusEnum | None:
@@ -48,7 +48,7 @@ async def search_talent_pool(
             f"调用人才库检索工具：user_id={current_user_id}, query={query}, top_k={top_k}, position_id={position_id}, status={status}"
         )
         async with session.begin():
-            user = await UserRepo(session).get_by_id(current_user_id)
+            user = await load_user_with_active_roles(session, current_user_id)
             if not user:
                 return "当前用户不存在，无法检索人才库。"
 

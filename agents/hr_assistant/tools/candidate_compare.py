@@ -5,10 +5,10 @@ from loguru import logger
 
 from models import AsyncSessionFactory
 from repository.candidate_repo import CandidateRepo
-from repository.user_repo import UserRepo
 
 from ..state import HRAssistantState
 from .candidate_detail import _build_candidate_detail
+from .user_context import load_user_with_active_roles
 
 
 def _build_candidate_compare_payload(candidates, requested_candidate_ids: list[str]) -> dict:
@@ -64,7 +64,7 @@ async def compare_candidates(
 
     async with AsyncSessionFactory() as session:
         async with session.begin():
-            user = await UserRepo(session).get_by_id(current_user_id)
+            user = await load_user_with_active_roles(session, current_user_id)
             if not user:
                 return "当前用户不存在，无法对比候选人。"
 

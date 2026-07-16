@@ -4,9 +4,9 @@ from langchain.tools import ToolRuntime, tool
 
 from models import AsyncSessionFactory
 from repository.candidate_repo import CandidateRepo
-from repository.user_repo import UserRepo
 
 from ..state import HRAssistantState
+from .user_context import load_user_with_active_roles
 
 
 def _safe_text(value: str | None) -> str:
@@ -81,7 +81,7 @@ async def get_candidate_detail(
 
     async with AsyncSessionFactory() as session:
         async with session.begin():
-            user = await UserRepo(session).get_by_id(current_user_id)
+            user = await load_user_with_active_roles(session, current_user_id)
             if not user:
                 return "当前用户不存在，无法查询候选人详情。"
 

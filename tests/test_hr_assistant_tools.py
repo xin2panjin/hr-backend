@@ -6,6 +6,9 @@ from agents.hr_assistant.tools.knowledge_search import (
     _load_authorized_user,
     search_recruiting_knowledge,
 )
+from agents.hr_assistant.tools.user_context import load_user_with_active_roles
+from iam.policies.candidate_policy import CandidatePolicy, CandidateScopeType
+from iam.permissions import RoleCode
 from agents.hr_assistant.tools import HR_ASSISTANT_TOOLS
 from models.candidate import CandidateStatusEnum
 from services.hr_assistant_conversation_service import HRAssistantConversationService
@@ -107,6 +110,47 @@ async def test_knowledge_search_permission_check_rejects_user_without_assistant_
 
     assert user is None
     assert error == "当前用户没有使用企业制度知识库的权限。"
+
+
+@pytest.mark.asyncio
+async def test_load_user_with_active_roles_preserves_system_admin_candidate_scope():
+    user = SimpleNamespace(id="admin-1")
+
+    class FakeUserRepo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_by_id(self, user_id):
+            assert user_id == "admin-1"
+            return user
+
+    class FakeIamRepo:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_active_user_roles(self, user_id):
+            assert user_id == "admin-1"
+            return [
+                SimpleNamespace(
+                    role=SimpleNamespace(code=RoleCode.SYSTEM_ADMIN.value),
+                    scopes=[],
+                )
+            ]
+
+    import agents.hr_assistant.tools.user_context as user_context_module
+
+    original_user_repo = user_context_module.UserRepo
+    original_iam_repo = user_context_module.IamRepo
+    user_context_module.UserRepo = FakeUserRepo
+    user_context_module.IamRepo = FakeIamRepo
+    try:
+        loaded_user = await load_user_with_active_roles(object(), "admin-1")
+    finally:
+        user_context_module.UserRepo = original_user_repo
+        user_context_module.IamRepo = original_iam_repo
+
+    assert loaded_user is user
+    assert CandidatePolicy.resolve_scope(loaded_user).type == CandidateScopeType.ALL
 
 def test_build_candidate_detail_hides_sensitive_fields():
     candidate = SimpleNamespace(
